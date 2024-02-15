@@ -11,7 +11,7 @@ boundary_tags = Dict(
 # Example initialization of PointCloudMeshData
 points = [SVector{3}(rand(3)) for _ in 1:5] # Sample points
 neighbors = [rand(1:5, 3) for _ in 1:5] # Sample connectivity/neighbors
-pcmd = PointCloudDomain(points, neighbors, boundary_tags)
+domain = PointCloudDomain(points, neighbors, boundary_tags)
 
 # Example boundary tags with indices and normals
 boundary_tags = Dict(
@@ -22,4 +22,4 @@ boundary_tags = Dict(
 # Example initialization of PointCloudMeshData
 points = [SVector{2}(rand(2)) for _ in 1:5] # Sample points
 neighbors = [rand(1:5, 6) for _ in 1:5] # Sample connectivity/neighbors
-pcmd = PointCloudDomain(points, neighbors, boundary_tags)
+domain = PointCloudDomain(points, neighbors, boundary_tags)
