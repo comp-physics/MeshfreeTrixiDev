@@ -25,3 +25,5 @@ Manifest.toml
 
 # MacOS
 .DS_store
+.vscode/settings.json
+scratch.jl
