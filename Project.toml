@@ -1,4 +1,5 @@
 [deps]
+JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 MeshfreeTrixi = "fd449e90-7bb5-416e-be12-8a17b6c6ab2b"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"

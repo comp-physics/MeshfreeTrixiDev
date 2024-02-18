@@ -2,32 +2,40 @@ using Revise
 using StaticArrays
 using Trixi: summary_header, summary_line, summary_footer, increment_indent
 
-struct PointData{Tv,Ti}
+includet("geometry_primatives.jl")
+
+struct PointData{Tv, Ti}
     points::Vector{Tv}                # Point coordinates
     neighbors::Vector{Vector{Ti}}     # Neighbors for each point
     num_points::Int                   # Number of points
     num_neighbors::Int                # Number of neighbors lists
 
-    function PointData{Tv,Ti}(points::Vector{Tv}, neighbors::Vector{Vector{Ti}}) where {Tv,Ti}
-        new{Tv,Ti}(points, neighbors, length(points), length(neighbors[1]))
+    function PointData{Tv, Ti}(points::Vector{Tv},
+                               neighbors::Vector{Vector{Ti}}) where {Tv, Ti}
+        new{Tv, Ti}(points, neighbors, length(points), length(neighbors[1]))
     end
 end
 
-
-struct BoundaryData{Ti<:Integer,Tv<:SVector{N,T} where {N,T<:Number}}
+struct BoundaryData{Ti <: Integer, Tv <: SVector{N, T} where {N, T <: Number}}
     idx::Vector{Ti}       # Indices of boundary points
     normals::Vector{Tv}   # Normals at boundary points
 end
 
-struct PointCloudDomain{Dim,Tv,Ti}
-    pd::PointData{Tv,Ti}  # Encapsulates points and neighbors
-    boundary_tags::Dict{Symbol,BoundaryData{Ti,Tv}}  # Boundary data
+struct PointCloudDomain{Dim, Tv, Ti}
+    pd::PointData{Tv, Ti}  # Encapsulates points and neighbors
+    boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}  # Boundary data
 end
 
 function PointCloudDomain(points::Vector{Tv}, neighbors::Vector{Vector{Ti}},
-    boundary_tags::Dict{Symbol,BoundaryData{Ti,Tv}}) where {N,Tv<:SVector{N,Float64},Ti}
-    pointData = PointData{Tv,Ti}(points, neighbors)  # Create an instance of PointData
-    return PointCloudDomain{N,Tv,Ti}(pointData, boundary_tags)
+                          boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {N,
+                                                                                    Tv <:
+                                                                                    SVector{
+                                                                                            N,
+                                                                                            Float64
+                                                                                            },
+                                                                                    Ti}
+    pointData = PointData{Tv, Ti}(points, neighbors)  # Create an instance of PointData
+    return PointCloudDomain{N, Tv, Ti}(pointData, boundary_tags)
 end
 
 # Base.ndims(::PointCloudDomain{NDIMS}) where {NDIMS} = NDIMS
@@ -38,7 +46,7 @@ end
 #     print(io, "$MeshType PointCloudDomain with NDIMS = $NDIMS.")
 # end
 
-function Base.show(io::IO, mesh::PointCloudDomain{Dim,Tv,Ti}) where {Dim,Tv,Ti}
+function Base.show(io::IO, mesh::PointCloudDomain{Dim, Tv, Ti}) where {Dim, Tv, Ti}
     print(io, "PointCloudDomain with dimension = $Dim, point type = $Tv, index type = $Ti")
 end
 
@@ -59,7 +67,8 @@ end
 #     end
 # end
 
-function Base.show(io::IO, ::MIME"text/plain", mesh::PointCloudDomain{Dim,Tv,Ti}) where {Dim,Tv,Ti}
+function Base.show(io::IO, ::MIME"text/plain",
+                   mesh::PointCloudDomain{Dim, Tv, Ti}) where {Dim, Tv, Ti}
     if get(io, :compact, false)
         show(io, mesh)
     else
@@ -74,10 +83,10 @@ function Base.show(io::IO, ::MIME"text/plain", mesh::PointCloudDomain{Dim,Tv,Ti}
 
         for (boundary_name, data) in mesh.boundary_tags
             boundary_points_count = length(data.idx)
-            summary_line(increment_indent(io), "Boundary '$boundary_name'", "$boundary_points_count boundary points")
+            summary_line(increment_indent(io), "Boundary '$boundary_name'",
+                         "$boundary_points_count boundary points")
         end
 
         summary_footer(io)
     end
 end
-
