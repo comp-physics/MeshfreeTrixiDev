@@ -22,13 +22,13 @@ rd = RefElemData(Tri(), N)
 ### RefElemData called by basis
 # Rework for PointCloudDomain
 struct RefElemData{Dim, ElemShape <: AbstractElemShape{Dim}, ApproximationType,
-                   NT, NV, PV}
+                   NT, NV, F}
     element_type::ElemShape
     approximation_type::ApproximationType # Polynomial / SBP{...}
 
     N::NT               # polynomial degree of accuracy
-    nv::NV               # list of vertices defining neighbors
-    pv::PV               # point coordinates
+    nv::NV               # number of neighbors
+    f::F               # basis function 
 end
 
 # need this to use @set outside of StartUpDG
@@ -40,11 +40,11 @@ end
 function ConstructionBase.getproperties(rd::RefElemData)
     (; element_type = rd.element_type, approximation_type = rd.approximation_type, N = rd.N,
      nv = rd.nv,
-     pv = rd.pv)
+     f = rd.f)
 end
 
 # Updated _propertynames function to reflect the new fields in RefElemData
-_propertynames(::Type{RefElemData}, private::Bool = false) = (:nv, :pv)
+_propertynames(::Type{RefElemData}, private::Bool = false) = (:nv, :f)
 
 function Base.propertynames(x::RefElemData, private::Bool = false)
     return (fieldnames(typeof(x))..., _propertynames(typeof(x))...)
@@ -92,7 +92,7 @@ end
 struct DefaultRBFType end
 RBF() = RBF{DefaultRBFType}(DefaultRBFType())
 
-# Polynomial{Gauss} type indicates (N+1)-point Gauss quadrature on tensor product elements
+# RBF(PolyharmonicSpline()) type indicates (N+1)-point Gauss quadrature on tensor product elements
 struct PolyharmonicSpline end
 RBF{PolyharmonicSpline}() = RBF(PolyharmonicSpline())
 
@@ -134,3 +134,12 @@ _short_typeof(approx_type::RBF{<:PolyharmonicSpline}) = "RBF{PolyharmonicSpline}
 
 Constructor for `RefElemData` for different element types.
 """
+function RefElemData(elem::Point1D, approx_type::RBF{DefaultRBFType}, N)
+    # Construct basis functions on reference element
+    F = nothing
+
+    # Number of neighbors
+    NV = 1
+
+    return RefElemData(elem, approx_type, N, NV, F)
+end
