@@ -9,8 +9,8 @@ struct Point3D <: AbstractElemShape{3} end
 """
     struct RefElemData
 
-RefElemData: contains info (interpolation points, volume/face quadrature, operators)
-for a high order nodal basis on a given reference element. 
+RefElemData: contains info (point coords, neighbors, order of accuracy)
+for a high order RBF basis on a given reference element. 
 
 Example:
 ```julia
@@ -22,39 +22,13 @@ rd = RefElemData(Tri(), N)
 ### RefElemData called by basis
 # Rework for PointCloudDomain
 struct RefElemData{Dim, ElemShape <: AbstractElemShape{Dim}, ApproximationType,
-                   NT, FV, RST, RSTP, RSTQ, RSTF, NRSTJ, FMASK, TVDM,
-                   VQ, VF, MM, P, D, L, VP, V1Type, WQ, WF}
+                   NT, NV, PV}
     element_type::ElemShape
     approximation_type::ApproximationType # Polynomial / SBP{...}
 
     N::NT               # polynomial degree of accuracy
-    fv::FV               # list of vertices defining faces, e.g., ([1,2],[2,3],[3,1]) for a triangle
-    V1::V1Type           # low order interpolation matrix
-
-    rst::RST             # interpolation node coordinates
-    VDM::TVDM            # generalized Vandermonde matrix
-    Fmask::FMASK         # indices of face nodes
-
-    rstp::RSTP           # plotting nodes
-    Vp::VP               # interpolation matrix to plotting nodes
-
-    # volume quadrature 
-    rstq::RSTQ
-    wq::WQ
-    Vq::VQ               # quad interp mat
-
-    # face quadrature 
-    rstf::RSTF
-    wf::WF               # quad weights
-    Vf::VF               # face quad interp mat
-    nrstJ::NRSTJ         # reference normals, quad weights
-
-    M::MM                # mass matrix
-    Pq::P                # L2 projection matrix
-
-    # Nodal DG operators
-    Drst::D              # differentiation operators
-    LIFT::L              # lift matrix
+    nv::NV               # list of vertices defining neighbors
+    pv::PV               # point coordinates
 end
 
 # need this to use @set outside of StartUpDG
@@ -65,11 +39,8 @@ end
 
 function ConstructionBase.getproperties(rd::RefElemData)
     (; element_type = rd.element_type, approximation_type = rd.approximation_type, N = rd.N,
-     fv = rd.fv, V1 = rd.V1,
-     rst = rd.rst, VDM = rd.VDM, Fmask = rd.Fmask, rstp = rd.rstp, Vp = rd.Vp,
-     rstq = rd.rstq, wq = rd.wq, Vq = rd.Vq, rstf = rd.rstf, wf = rd.wf, Vf = rd.Vf,
-     nrstJ = rd.nrstJ,
-     M = rd.M, Pq = rd.Pq, Drst = rd.Drst, LIFT = rd.LIFT)
+     nv = rd.nv,
+     pv = rd.pv)
 end
 
 _propertynames(::Type{RefElemData}, private::Bool = false) = (:num_faces, :Np, :Nq, :Nfq)
@@ -157,38 +128,38 @@ RefElemData(elem, approx_type; N, kwargs...) = RefElemData(elem, approx_type, N;
 # default to Polynomial-type RefElemData
 RefElemData(elem, N::Int; kwargs...) = RefElemData(elem, Polynomial(), N; kwargs...)
 
-@inline Base.ndims(::Line) = 1
-@inline Base.ndims(::Union{Tri, Quad}) = 2
-@inline Base.ndims(::Union{Tet, Hex}) = 3
+@inline Base.ndims(::Point1D) = 1
+@inline Base.ndims(::Point2D) = 2
+@inline Base.ndims(::Point3D) = 3
 
-@inline num_vertices(::Tri) = 3
-@inline num_vertices(::Union{Quad, Tet}) = 4
-@inline num_vertices(::Hex) = 8
-@inline num_vertices(::Wedge) = 6
-@inline num_vertices(::Pyr) = 5
+# @inline num_vertices(::Tri) = 3
+# @inline num_vertices(::Union{Quad, Tet}) = 4
+# @inline num_vertices(::Hex) = 8
+# @inline num_vertices(::Wedge) = 6
+# @inline num_vertices(::Pyr) = 5
 
-@inline num_faces(::Line) = 2
-@inline num_faces(::Tri) = 3
-@inline num_faces(::Union{Quad, Tet}) = 4
-@inline num_faces(::Union{Wedge, Pyr}) = 5
-@inline num_faces(::Hex) = 6
+# @inline num_faces(::Line) = 2
+# @inline num_faces(::Tri) = 3
+# @inline num_faces(::Union{Quad, Tet}) = 4
+# @inline num_faces(::Union{Wedge, Pyr}) = 5
+# @inline num_faces(::Hex) = 6
 
-@inline face_type(::Union{Tri, Quad}) = Line()
-@inline face_type(::Hex) = Quad()
-@inline face_type(::Tet) = Tri()
+# @inline face_type(::Union{Tri, Quad}) = Line()
+# @inline face_type(::Hex) = Quad()
+# @inline face_type(::Tet) = Tri()
 
 # generic fallback 
-@inline face_type(elem::AbstractElemShape, id) = face_type(elem)
+# @inline face_type(elem::AbstractElemShape, id) = face_type(elem)
 
 # Wedges have different types of faces depending on the face. 
 # We define the first three faces to be quadrilaterals and the 
 # last two faces are triangles.
-@inline face_type(::Wedge, id) = (id <= 3) ? Quad() : Tri()
+# @inline face_type(::Wedge, id) = (id <= 3) ? Quad() : Tri()
 
 # Pyramids have different types of faces depending on the face. 
 # We define the first four faces to be triangles and the 
 # last face to be a quadrilateral. 
-@inline face_type(::Pyr, id) = (id <= 4) ? Tri() : Quad()
+# @inline face_type(::Pyr, id) = (id <= 4) ? Tri() : Quad()
 
 # ====================================================
 #          RefElemData approximation types
@@ -223,45 +194,6 @@ TensorProductQuadrature(r1D, w1D) = TensorProductQuadrature((r1D, w1D))
 # Polynomial{Gauss} type indicates (N+1)-point Gauss quadrature on tensor product elements
 struct Gauss end
 Polynomial{Gauss}() = Polynomial(Gauss())
-
-# ========= SBP approximation types ============
-
-struct DefaultSBPType end
-
-# line/quad/hex nodes
-struct TensorProductLobatto end
-
-# triangle node types
-struct Hicken end
-struct Kubatko{FaceNodeType} end
-
-# face node types for Kubatko
-struct LegendreFaceNodes end
-struct LobattoFaceNodes end
-
-"""
-    `SBP{Type}`
-
-Represents polynomial approximation types (as opposed to finite differences). 
-By default, `Polynomial()` constructs a `Polynomial{StartUpDG.DefaultPolynomialType}`.
-Specifying a type parameters allows for dispatch on additional structure within a
-polynomial approximation (e.g., collocation, tensor product quadrature, etc). 
-"""
-# SBP approximation type: the more common diagonal E and diagonal-norm SBP operators on tri/quads.
-struct SBP{Type} end
-
-SBP() = SBP{DefaultSBPType}() # no-parameter default
-
-# sets default to TensorProductLobatto on Quads 
-function RefElemData(elem::Union{Line, Quad, Hex}, approxT::SBP{DefaultSBPType}, N;
-                     kwargs...)
-    RefElemData(elem, SBP{TensorProductLobatto}(), N; kwargs...)
-end
-
-# sets default to Kubatko{LobattoFaceNodes} on Tris
-function RefElemData(elem::Tri, approxT::SBP{DefaultSBPType}, N; kwargs...)
-    RefElemData(elem, SBP{Kubatko{LobattoFaceNodes}}(), N; kwargs...)
-end
 
 # ====================================
 #              Printing 
