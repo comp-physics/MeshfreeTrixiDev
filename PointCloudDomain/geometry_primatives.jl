@@ -5,6 +5,8 @@ struct Point1D <: AbstractElemShape{1} end
 struct Point2D <: AbstractElemShape{2} end
 struct Point3D <: AbstractElemShape{3} end
 
+dimensionality(elem::AbstractElemShape{Dim}) where {Dim} = Dim
+
 # StartUpDG for PointCloudDomain. Uses base types from NodesAndModes
 """
     struct RefElemData
@@ -134,7 +136,21 @@ _short_typeof(approx_type::RBF{<:PolyharmonicSpline}) = "RBF{PolyharmonicSpline}
 
 Constructor for `RefElemData` for different element types.
 """
-function RefElemData(elem::Point1D, approx_type::RBF{DefaultRBFType}, N)
+function RefElemData(elem::Union{Point1D, Point2D, Point3D},
+                     approx_type::RBF{DefaultRBFType}, N)
+    # Construct basis functions on reference element
+    # Default to PolyharmonicSpline RBFs w/ appended polynomials
+    F = nothing
+
+    # Number of neighbors
+    d = dimensionality(elem)
+    min_NV = [10, 15, 20]
+    NV = min(2 * binomial(N + d, d), min_NV[d])
+
+    return RefElemData(elem, approx_type, N, NV, F)
+end
+
+function RefElemData(elem::Point1D, approx_type::RBF{PolyharmonicSpline}, N)
     # Construct basis functions on reference element
     F = nothing
 
