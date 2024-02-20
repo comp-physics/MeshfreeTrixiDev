@@ -88,15 +88,26 @@ Specifying a type parameters allows for dispatch on additional structure within 
 RBF approximation (e.g., polyharmonic spline, collocation, etc). 
 """
 struct RBF{T}
-    data::T
+    rbf_type::T
+    Nrbf::Int  # Order for the RBF
 end
 
-struct DefaultRBFType end
-RBF() = RBF{DefaultRBFType}(DefaultRBFType())
+struct DefaultRBFType
+    Nrbf::Int
+    DefaultRBFType(Nrbf::Int = 3) = new(Nrbf)  # Default order is 3
+end
+RBF() = RBF(DefaultRBFType())
+# RBF(rbf_type::DefaultRBFType, Nrbf::Int = 3) = RBF{DefaultRBFType}(rbf_type, Nrbf)
+RBF(rbf_type::DefaultRBFType) = RBF{DefaultRBFType}(rbf_type, rbf_type.Nrbf)
 
 # RBF(PolyharmonicSpline()) type indicates (N+1)-point Gauss quadrature on tensor product elements
-struct PolyharmonicSpline end
-RBF{PolyharmonicSpline}() = RBF(PolyharmonicSpline())
+struct PolyharmonicSpline
+    Nrbf::Int
+    PolyharmonicSpline(Nrbf::Int = 3) = new(Nrbf)  # Default order is 3
+end
+# RBF{PolyharmonicSpline}() = RBF(PolyharmonicSpline())
+# RBF(rbf_type::PolyharmonicSpline, Nrbf::Int = 3) = RBF{PolyharmonicSpline}(rbf_type, Nrbf)
+RBF(rbf_type::PolyharmonicSpline) = RBF{PolyharmonicSpline}(rbf_type, rbf_type.Nrbf)
 
 # ====================================
 #              Printing 
@@ -140,22 +151,28 @@ function RefElemData(elem::Union{Point1D, Point2D, Point3D},
                      approx_type::RBF{DefaultRBFType}, N)
     # Construct basis functions on reference element
     # Default to PolyharmonicSpline RBFs w/ appended polynomials
+    Nrbf = approx_type.Nrbf
+    approx_type = RBF(PolyharmonicSpline(Nrbf))
     F = nothing
 
     # Number of neighbors
     d = dimensionality(elem)
     min_NV = [10, 15, 20]
-    NV = min(2 * binomial(N + d, d), min_NV[d])
+    NV = max(2 * binomial(N + d, d), min_NV[d])
 
     return RefElemData(elem, approx_type, N, NV, F)
 end
 
-function RefElemData(elem::Point1D, approx_type::RBF{PolyharmonicSpline}, N)
+function RefElemData(elem::Union{Point1D, Point2D, Point3D},
+                     approx_type::RBF, N)
     # Construct basis functions on reference element
+    # Default to PolyharmonicSpline RBFs w/ appended polynomials
     F = nothing
 
     # Number of neighbors
-    NV = 1
+    d = dimensionality(elem)
+    min_NV = [10, 15, 20]
+    NV = max(2 * binomial(N + d, d), min_NV[d])
 
     return RefElemData(elem, approx_type, N, NV, F)
 end
