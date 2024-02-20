@@ -8,6 +8,8 @@ struct Point3D <: AbstractElemShape{3} end
 dimensionality(elem::AbstractElemShape{Dim}) where {Dim} = Dim
 
 # StartUpDG for PointCloudDomain. Uses base types from NodesAndModes
+# May rename RefElemData to RefPointData to prevent confusion 
+# or conflicts with RefElemData in StartUpDG
 """
     struct RefElemData
 
@@ -85,7 +87,7 @@ RefElemData(elem, N::Int; kwargs...) = RefElemData(elem, RBF(), N; kwargs...)
 Represents RBF approximation types (as opposed to generic polynomials). 
 By default, `RBF()` constructs a `RBF{DefaultRBFType}`.
 Specifying a type parameters allows for dispatch on additional structure within an
-RBF approximation (e.g., polyharmonic spline, collocation, etc). 
+RBF approximation (e.g., polyharmonic spline, gaussian, etc). 
 """
 struct RBF{T}
     rbf_type::T
