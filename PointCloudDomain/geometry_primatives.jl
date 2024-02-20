@@ -116,8 +116,8 @@ RBF(rbf_type::PolyharmonicSpline) = RBF{PolyharmonicSpline}(rbf_type, rbf_type.N
 function Base.show(io::IO, ::MIME"text/plain", rd::RefElemData)
     @nospecialize rd
     print(io,
-          "RefElemData for a degree $(rd.N) $(_short_typeof(rd.approximation_type)) " *
-          "approximation on a $(_short_typeof(rd.element_type)) element.")
+          "RefElemData for a degree $(rd.N) approximation \nusing degree $(rd.approximation_type.Nrbf) $(_short_typeof(rd.approximation_type))s " *
+          "on a $(_short_typeof(rd.element_type)) element.")
 end
 
 function Base.show(io::IO, rd::RefElemData)
@@ -147,6 +147,7 @@ _short_typeof(approx_type::RBF{<:PolyharmonicSpline}) = "RBF{PolyharmonicSpline}
 
 Constructor for `RefElemData` for different element types.
 """
+# Default RefElemData
 function RefElemData(elem::Union{Point1D, Point2D, Point3D},
                      approx_type::RBF{DefaultRBFType}, N)
     # Construct basis functions on reference element
