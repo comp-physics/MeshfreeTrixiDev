@@ -2,7 +2,7 @@ using Revise
 using Trixi
 using ConstructionBase
 using MuladdMacro
-using Base.Threads
+using Trixi: @threaded
 
 includet("../header.jl")
 
