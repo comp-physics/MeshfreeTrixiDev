@@ -69,7 +69,7 @@ In particular, not the elements themselves are returned.
 end
 
 # iteration over quantities in a single element
-@inline nnodes(basis::RefElemData) = basis.Np
+@inline nnodes(basis::RefPointData) = basis.Np
 
 """
     each_face_node(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
@@ -233,7 +233,7 @@ end
 # estimates the timestep based on polynomial degree and domain. Does not account for physics (e.g.,
 # computes an estimate of `dt` based on the advection equation with constant unit advection speed).
 function estimate_dt(domain::PointCloudDomain, solver::PointCloudSolver)
-    rd = solver.basis # RefElemData
+    rd = solver.basis # RefPointData
     return StartUpDG.estimate_h(rd, domain.md) / StartUpDG.inverse_trace_constant(rd)
 end
 

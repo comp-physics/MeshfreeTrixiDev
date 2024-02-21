@@ -5,11 +5,11 @@
 # `PointCloudSolver` refers to both multiple RBFSolver types (polynomial/SBP, simplices/quads/hexes) as well as
 # the use of multi-dimensional operators in the solver.
 const PointCloudSolver{NDIMS, ElemType, ApproxType, SurfaceIntegral, VolumeIntegral} = RBFSolver{
-                                                                                                 <:RefElemData{
-                                                                                                               NDIMS,
-                                                                                                               ElemType,
-                                                                                                               ApproxType
-                                                                                                               },
+                                                                                                 <:RefPointData{
+                                                                                                                NDIMS,
+                                                                                                                ElemType,
+                                                                                                                ApproxType
+                                                                                                                },
                                                                                                  Mortar,
                                                                                                  SurfaceIntegral,
                                                                                                  VolumeIntegral
@@ -38,7 +38,7 @@ function Base.summary(io::IO, solver::RBFSolver) where {RBFSolver <: PointCloudS
 end
 
 # real(rd) is the eltype of the nodes `rd.r`.
-Base.real(rd::RefElemData) = eltype(rd.r)
+Base.real(rd::RefPointData) = eltype(rd.r)
 # Currently RefPointData does not have eltype
 
 """
@@ -57,7 +57,7 @@ Create a discontinuous Galerkin method which uses
 Optional:
 - `approximation_type` (default is `Polynomial()`; `SBP()` also supported for `Tri()`, `Quad()`,
   and `Hex()` element types).
-- `RefElemData_kwargs` are additional keyword arguments for `RefElemData`, such as `quad_rule_vol`.
+- `RefElemData_kwargs` are additional keyword arguments for `RefPointData`, such as `quad_rule_vol`.
   For more info, see the [StartUpDG.jl docs](https://jlchan.github.io/StartUpDG.jl/dev/).
 """
 function PointCloudSolver(; polydeg = nothing,
@@ -81,11 +81,11 @@ function PointCloudSolver(element_type::Wedge,
                           surface_integral;
                           polydeg::Tuple,
                           kwargs...)
-    factor_a = RefElemData(Tri(), approximation_type, polydeg[1]; kwargs...)
-    factor_b = RefElemData(Line(), approximation_type, polydeg[2]; kwargs...)
+    factor_a = RefPointData(Tri(), approximation_type, polydeg[1]; kwargs...)
+    factor_b = RefPointData(Line(), approximation_type, polydeg[2]; kwargs...)
 
     tensor = TensorProductWedge(factor_a, factor_b)
-    rd = RefElemData(element_type, tensor; kwargs...)
+    rd = RefPointData(element_type, tensor; kwargs...)
     return RBFSolver(rd, nothing, surface_integral, volume_integral)
 end
 
@@ -96,12 +96,12 @@ function PointCloudSolver(element_type::AbstractElemShape,
                           surface_integral;
                           polydeg::Integer,
                           kwargs...)
-    rd = RefElemData(element_type, approximation_type, polydeg; kwargs...)
+    rd = RefPointData(element_type, approximation_type, polydeg; kwargs...)
     # `nothing` is passed as `mortar`
     return RBFSolver(rd, nothing, surface_integral, volume_integral)
 end
 
-function PointCloudSolver(basis::RefElemData; volume_integral, surface_integral)
+function PointCloudSolver(basis::RefPointData; volume_integral, surface_integral)
     # `nothing` is passed as `mortar`
     RBFSolver(basis, nothing, surface_integral, volume_integral)
 end
@@ -109,15 +109,15 @@ end
 """
     DGMultiBasis(element_type, polydeg; approximation_type = Polynomial(), kwargs...)
 
-Constructs a basis for PointCloudSolver solvers. Returns a "StartUpDG.RefElemData" object.
-  The `kwargs` arguments are additional keyword arguments for `RefElemData`, such as `quad_rule_vol`.
+Constructs a basis for PointCloudSolver solvers. Returns a "StartUpDG.RefPointData" object.
+  The `kwargs` arguments are additional keyword arguments for `RefPointData`, such as `quad_rule_vol`.
   These are the same as the `RefElemData_kwargs` used in [`PointCloudSolver`](@ref).
   For more info, see the [StartUpDG.jl docs](https://jlchan.github.io/StartUpDG.jl/dev/).
 
 """
 function DGMultiBasis(element_type, polydeg; approximation_type = Polynomial(),
                       kwargs...)
-    RefElemData(element_type, approximation_type, polydeg; kwargs...)
+    RefPointData(element_type, approximation_type, polydeg; kwargs...)
 end
 
 ########################################
