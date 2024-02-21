@@ -39,6 +39,7 @@ end
 
 # real(rd) is the eltype of the nodes `rd.r`.
 Base.real(rd::RefElemData) = eltype(rd.r)
+# Currently RefPointData does not have eltype
 
 """
     PointCloudSolver(; polydeg::Integer,

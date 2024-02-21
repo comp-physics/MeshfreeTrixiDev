@@ -56,15 +56,17 @@ Base.summary(io::IO, solver::RBFSolver) = print(io,
 
 @inline Base.real(solver::RBFSolver) = real(solver.basis)
 
-function get_element_variables!(element_variables, u, mesh, equations,
+function get_element_variables!(element_variables, u, domain, equations,
                                 solver::RBFSolver, cache)
-    get_element_variables!(element_variables, u, mesh, equations,
+    get_element_variables!(element_variables, u, domain, equations,
                            solver.volume_integral,
                            solver, cache)
 end
 
-function get_node_variables!(node_variables, mesh, equations, solver::RBFSolver, cache)
-    get_node_variables!(node_variables, mesh, equations, solver.volume_integral, solver,
+function get_node_variables!(node_variables, domain, equations, solver::RBFSolver,
+                             cache)
+    get_node_variables!(node_variables, domain, equations, solver.volume_integral,
+                        solver,
                         cache)
 end
 
@@ -72,8 +74,8 @@ const MeshesRBFSolverSEM = Union{TreeMesh, StructuredMesh, UnstructuredMesh2D,
                                  P4estMesh,
                                  T8codeMesh}
 
-@inline function ndofs(mesh::MeshesRBFSolverSEM, solver::RBFSolver, cache)
-    nelements(cache.elements) * nnodes(solver)^ndims(mesh)
+@inline function ndofs(domain::MeshesRBFSolverSEM, solver::RBFSolver, cache)
+    nelements(cache.elements) * nnodes(solver)^ndims(domain)
 end
 
 # TODO: Taal performance, 1:nnodes(solver) vs. Base.OneTo(nnodes(solver)) vs. SOneTo(nnodes(solver)) for RBFSolverSEM
@@ -88,10 +90,10 @@ In particular, not the nodes themselves are returned.
 @inline nnodes(solver::RBFSolver) = nnodes(solver.basis)
 
 # This is used in some more general analysis code and needs to dispatch on the
-# `mesh` for some combinations of mesh/solver.
-@inline nelements(mesh, solver::RBFSolver, cache) = nelements(solver, cache)
-@inline function ndofsglobal(mesh, solver::RBFSolver, cache)
-    nelementsglobal(solver, cache) * nnodes(solver)^ndims(mesh)
+# `domain` for some combinations of domain/solver.
+@inline nelements(domain, solver::RBFSolver, cache) = nelements(solver, cache)
+@inline function ndofsglobal(domain, solver::RBFSolver, cache)
+    nelementsglobal(solver, cache) * nnodes(solver)^ndims(domain)
 end
 
 """
@@ -224,35 +226,37 @@ end
 SolutionAnalyzer(solver::RBFSolver; kwargs...) = SolutionAnalyzer(solver.basis;
                                                                   kwargs...)
 
-AdaptorAMR(mesh, solver::RBFSolver) = AdaptorL2(solver.basis)
+AdaptorAMR(domain, solver::RBFSolver) = AdaptorL2(solver.basis)
 
 # General structs for discretizations based on the basic principle of
 # RBFSolverSEM (discontinuous Galerkin spectral element method)
-include("solversem/solversem.jl")
+# include("solversem/solversem.jl")
 
 # Finite difference methods using summation by parts (SBP) operators
 # These methods are very similar to RBFSolver methods since they also impose interface
 # and boundary conditions weakly. Thus, these methods can re-use a lot of
 # functionality implemented for RBFSolverSEM.
-include("fdsbp_tree/fdsbp.jl")
-include("fdsbp_unstructured/fdsbp.jl")
+# include("fdsbp_tree/fdsbp.jl")
+# include("fdsbp_unstructured/fdsbp.jl")
 
-function allocate_coefficients(mesh::AbstractMesh, equations, solver::RBFSolver, cache)
+function allocate_coefficients(domain::AbstractDomain, equations, solver::RBFSolver,
+                               cache)
     # We must allocate a `Vector` in order to be able to `resize!` it (AMR).
     # cf. wrap_array
     zeros(eltype(cache.elements),
-          nvariables(equations) * nnodes(solver)^ndims(mesh) * nelements(solver, cache))
+          nvariables(equations) * nnodes(solver)^ndims(domain) *
+          nelements(solver, cache))
 end
 
-@inline function wrap_array(u_ode::AbstractVector, mesh::AbstractMesh, equations,
+@inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
                             solver::RBFSolverSEM, cache)
     @boundscheck begin
         @assert length(u_ode) ==
-                nvariables(equations) * nnodes(solver)^ndims(mesh) *
+                nvariables(equations) * nnodes(solver)^ndims(domain) *
                 nelements(solver, cache)
     end
     # We would like to use
-    #     reshape(u_ode, (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(mesh))..., nelements(solver, cache)))
+    #     reshape(u_ode, (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))..., nelements(solver, cache)))
     # but that results in
     #     ERROR: LoadError: cannot resize array with shared data
     # when we resize! `u_ode` during AMR.
@@ -280,23 +284,24 @@ end
         #     Chris Elrod, one of the best performance software engineers for Julia.
         PtrArray(pointer(u_ode),
                  (StaticInt(nvariables(equations)),
-                  ntuple(_ -> StaticInt(nnodes(solver)), ndims(mesh))...,
+                  ntuple(_ -> StaticInt(nnodes(solver)), ndims(domain))...,
                   nelements(solver, cache)))
-        #  (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(mesh))..., nelements(solver, cache)))
+        #  (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))..., nelements(solver, cache)))
     else
         # The following version is reasonably fast and allows us to `resize!(u_ode, ...)`.
-        unsafe_wrap(Array{eltype(u_ode), ndims(mesh) + 2}, pointer(u_ode),
-                    (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(mesh))...,
+        unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
+                    (nvariables(equations),
+                     ntuple(_ -> nnodes(solver), ndims(domain))...,
                      nelements(solver, cache)))
     end
 end
 
 # Finite difference summation by parts (FDSBP) methods
-@inline function wrap_array(u_ode::AbstractVector, mesh::AbstractMesh, equations,
+@inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
                             solver::FDSBP, cache)
     @boundscheck begin
         @assert length(u_ode) ==
-                nvariables(equations) * nnodes(solver)^ndims(mesh) *
+                nvariables(equations) * nnodes(solver)^ndims(domain) *
                 nelements(solver, cache)
     end
     # See comments on the RBFSolverSEM version above
@@ -306,38 +311,40 @@ end
         # - FD methods tend to use high node counts
         PtrArray(pointer(u_ode),
                  (StaticInt(nvariables(equations)),
-                  ntuple(_ -> nnodes(solver), ndims(mesh))...,
+                  ntuple(_ -> nnodes(solver), ndims(domain))...,
                   nelements(solver, cache)))
     else
         # The following version is reasonably fast and allows us to `resize!(u_ode, ...)`.
-        unsafe_wrap(Array{eltype(u_ode), ndims(mesh) + 2}, pointer(u_ode),
-                    (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(mesh))...,
+        unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
+                    (nvariables(equations),
+                     ntuple(_ -> nnodes(solver), ndims(domain))...,
                      nelements(solver, cache)))
     end
 end
 
 # General fallback
-@inline function wrap_array(u_ode::AbstractVector, mesh::AbstractMesh, equations,
+@inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
                             solver::RBFSolver, cache)
-    wrap_array_native(u_ode, mesh, equations, solver, cache)
+    wrap_array_native(u_ode, domain, equations, solver, cache)
 end
 
 # Like `wrap_array`, but guarantees to return a plain `Array`, which can be better
 # for interfacing with external C libraries (MPI, HDF5, visualization),
 # writing solution files etc.
-@inline function wrap_array_native(u_ode::AbstractVector, mesh::AbstractMesh, equations,
+@inline function wrap_array_native(u_ode::AbstractVector, domain::AbstractDomain,
+                                   equations,
                                    solver::RBFSolver, cache)
     @boundscheck begin
         @assert length(u_ode) ==
-                nvariables(equations) * nnodes(solver)^ndims(mesh) *
+                nvariables(equations) * nnodes(solver)^ndims(domain) *
                 nelements(solver, cache)
     end
-    unsafe_wrap(Array{eltype(u_ode), ndims(mesh) + 2}, pointer(u_ode),
-                (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(mesh))...,
+    unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
+                (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))...,
                  nelements(solver, cache)))
 end
 
-function compute_coefficients!(u, func, t, mesh::AbstractMesh{1}, equations,
+function compute_coefficients!(u, func, t, domain::AbstractDomain{1}, equations,
                                solver::RBFSolver,
                                cache)
     @threaded for element in eachelement(solver, cache)
@@ -360,7 +367,7 @@ function compute_coefficients!(u, func, t, mesh::AbstractMesh{1}, equations,
     end
 end
 
-function compute_coefficients!(u, func, t, mesh::AbstractMesh{2}, equations,
+function compute_coefficients!(u, func, t, domain::AbstractDomain{2}, equations,
                                solver::RBFSolver,
                                cache)
     @threaded for element in eachelement(solver, cache)
@@ -374,7 +381,7 @@ function compute_coefficients!(u, func, t, mesh::AbstractMesh{2}, equations,
     end
 end
 
-function compute_coefficients!(u, func, t, mesh::AbstractMesh{3}, equations,
+function compute_coefficients!(u, func, t, domain::AbstractDomain{3}, equations,
                                solver::RBFSolver,
                                cache)
     @threaded for element in eachelement(solver, cache)
@@ -388,13 +395,13 @@ function compute_coefficients!(u, func, t, mesh::AbstractMesh{3}, equations,
     end
 end
 
-# Discretizations specific to each mesh type of Trixi.jl
+# Discretizations specific to each domain type of Trixi.jl
 # If some functionality is shared by multiple combinations of meshes/solvers,
-# it is defined in the directory of the most basic mesh and solver type.
+# it is defined in the directory of the most basic domain and solver type.
 # The most basic solver type in Trixi.jl is RBFSolverSEM (historic reasons and background
 # of the main contributors).
-# We consider the `TreeMesh` to be the most basic mesh type since it is Cartesian
-# and was the first mesh in Trixi.jl. The order of the other mesh types is the same
+# We consider the `TreeMesh` to be the most basic domain type since it is Cartesian
+# and was the first domain in Trixi.jl. The order of the other domain types is the same
 # as the include order below.
 # include("solversem_tree/solver.jl")
 # include("solversem_structured/solver.jl")
