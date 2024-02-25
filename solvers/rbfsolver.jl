@@ -1,24 +1,25 @@
+# Based on Trixi/src/solvers/dg.jl
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.
 # See https://ranocha.de/blog/Optimizing_EC_Trixi for further details.
 @muladd begin
 #! format: noindent
-abstract type AbstractVolumeIntegral end
+abstract type AbstractRBFEngine end
 
 function get_element_variables!(element_variables, u, mesh, equations,
-                                volume_integral::AbstractVolumeIntegral, dg, cache)
+                                engine::AbstractRBFEngine, solver, cache)
     nothing
 end
 
 function get_node_variables!(node_variables, mesh, equations,
-                             volume_integral::AbstractVolumeIntegral, dg, cache)
+                             engine::AbstractRBFEngine, solver, cache)
     nothing
 end
 """
-    VolumeIntegralWeakForm()
+    RBFFDEngine()
 
-The classical weak form volume integral type for DG methods as explained in
+The classical RBF-FD backend type for meshfree methods as explained in
 standard textbooks.
 
 ## References
@@ -32,26 +33,24 @@ standard textbooks.
   Applications
   [doi: 10.1007/978-0-387-72067-8](https://doi.org/10.1007/978-0-387-72067-8)
 
-`VolumeIntegralWeakForm()` is only implemented for conserved terms as
+`RBFFDEngine()` is only implemented for conserved terms as
 non-conservative terms should always be discretized in conjunction with a flux-splitting scheme,
 see [`VolumeIntegralFluxDifferencing`](@ref).
 This treatment is required to achieve, e.g., entropy-stability or well-balancedness.
 """
-struct VolumeIntegralWeakForm <: AbstractVolumeIntegral end
+struct RBFFDEngine <: AbstractRBFEngine end
 
-create_cache(mesh, equations, ::VolumeIntegralWeakForm, dg, uEltype) = NamedTuple()
+create_cache(mesh, equations, ::RBFFDEngine, solver, uEltype) = NamedTuple()
 """
-    RBFSolver(; basis, mortar, surface_integral, volume_integral)
+    RBFSolver(; basis, mortar, surface_integral, engine)
 
 Create a discontinuous Galerkin method.
 If [`basis isa LobattoLegendreBasis`](@ref LobattoLegendreBasis),
 this creates a [`RBFSolverSEM`](@ref).
 """
-struct RBFSolver{Basis, Mortar, SurfaceIntegral, VolumeIntegral}
+struct RBFSolver{Basis, RBFEngine}
     basis::Basis
-    mortar::Mortar
-    surface_integral::SurfaceIntegral
-    volume_integral::VolumeIntegral
+    engine::RBFEngine
 end
 
 function Base.show(io::IO, solver::RBFSolver)
@@ -59,9 +58,7 @@ function Base.show(io::IO, solver::RBFSolver)
 
     print(io, "RBFSolver{", real(solver), "}(")
     print(io, solver.basis)
-    print(io, ", ", solver.mortar)
-    print(io, ", ", solver.surface_integral)
-    print(io, ", ", solver.volume_integral)
+    print(io, ", ", solver.engine)
     print(io, ")")
 end
 
@@ -73,14 +70,10 @@ function Base.show(io::IO, mime::MIME"text/plain", solver::RBFSolver)
     else
         summary_header(io, "RBFSolver{" * string(real(solver)) * "}")
         summary_line(io, "basis", solver.basis)
-        summary_line(io, "mortar", solver.mortar)
-        summary_line(io, "surface integral",
-                     solver.surface_integral |> typeof |> nameof)
-        show(increment_indent(io), mime, solver.surface_integral)
-        summary_line(io, "volume integral", solver.volume_integral |> typeof |> nameof)
-        if !(solver.volume_integral isa VolumeIntegralWeakForm) &&
-           !(solver.volume_integral isa VolumeIntegralStrongForm)
-            show(increment_indent(io), mime, solver.volume_integral)
+        summary_line(io, "engine",
+                     solver.engine |> typeof |> nameof)
+        if !(solver.engine isa RBFFDEngine)
+            show(increment_indent(io), mime, solver.engine)
         end
         summary_footer(io)
     end
@@ -95,24 +88,24 @@ Base.summary(io::IO, solver::RBFSolver) = print(io,
 function get_element_variables!(element_variables, u, domain, equations,
                                 solver::RBFSolver, cache)
     get_element_variables!(element_variables, u, domain, equations,
-                           solver.volume_integral,
+                           solver.engine,
                            solver, cache)
 end
 
 function get_node_variables!(node_variables, domain, equations, solver::RBFSolver,
                              cache)
-    get_node_variables!(node_variables, domain, equations, solver.volume_integral,
+    get_node_variables!(node_variables, domain, equations, solver.engine,
                         solver,
                         cache)
 end
 
-const MeshesRBFSolverSEM = Union{TreeMesh, StructuredMesh, UnstructuredMesh2D,
-                                 P4estMesh,
-                                 T8codeMesh}
+# const MeshesRBFSolverSEM = Union{TreeMesh, StructuredMesh, UnstructuredMesh2D,
+#                                  P4estMesh,
+#                                  T8codeMesh}
 
-@inline function ndofs(domain::MeshesRBFSolverSEM, solver::RBFSolver, cache)
-    nelements(cache.elements) * nnodes(solver)^ndims(domain)
-end
+# @inline function ndofs(domain::MeshesRBFSolverSEM, solver::RBFSolver, cache)
+#     nelements(cache.elements) * nnodes(solver)^ndims(domain)
+# end
 
 # TODO: Taal performance, 1:nnodes(solver) vs. Base.OneTo(nnodes(solver)) vs. SOneTo(nnodes(solver)) for RBFSolverSEM
 """

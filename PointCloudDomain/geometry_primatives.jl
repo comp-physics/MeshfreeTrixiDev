@@ -1,4 +1,4 @@
-# NodesandModes for PointCloudDomain
+# Based on NodesandModes for PointCloudDomain
 # each type of element shape - used for dispatch only (basis specifically)
 abstract type AbstractElemShape{NDIMS} end
 struct Point1D <: AbstractElemShape{1} end
@@ -7,7 +7,7 @@ struct Point3D <: AbstractElemShape{3} end
 
 dimensionality(elem::AbstractElemShape{Dim}) where {Dim} = Dim
 
-# StartUpDG for PointCloudDomain. Uses base types from NodesAndModes
+# Based on StartUpDG for PointCloudDomain. Uses base types from NodesAndModes
 # May rename RefPointData to RefPointData to prevent confusion 
 # or conflicts with RefPointData in StartUpDG
 """
@@ -28,7 +28,7 @@ rd = RefPointData(Tri(), N)
 struct RefPointData{Dim, ElemShape <: AbstractElemShape{Dim}, ApproximationType,
                     NT, NV, F}
     element_type::ElemShape
-    approximation_type::ApproximationType # Polynomial / SBP{...}
+    approximation_type::ApproximationType # RBF / SBP{...}
 
     N::NT               # polynomial degree of accuracy
     nv::NV               # number of neighbors
@@ -72,7 +72,7 @@ function RefPointData(elem, approx_type; N, kwargs...)
     RefPointData(elem, approx_type, N; kwargs...)
 end
 
-# default to Polynomial-type RefPointData
+# default to RBF-type RefPointData
 RefPointData(elem, N::Int; kwargs...) = RefPointData(elem, RBF(), N; kwargs...)
 
 @inline Base.ndims(::Point1D) = 1
@@ -134,8 +134,8 @@ _short_typeof(x) = typeof(x)
 
 _short_typeof(approx_type::RBF{<:DefaultRBFType}) = "RBF"
 _short_typeof(approx_type::RBF{<:PolyharmonicSpline}) = "RBF{PolyharmonicSpline}"
-# function _short_typeof(approx_type::Polynomial{<:TensorProductQuadrature})
-#     "Polynomial{TensorProductQuadrature}"
+# function _short_typeof(approx_type::RBF{<:TensorProductQuadrature})
+#     "RBF{TensorProductQuadrature}"
 # end
 
 """

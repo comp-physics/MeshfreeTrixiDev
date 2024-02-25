@@ -1,21 +1,16 @@
+# Based on Trixi/solvers/DGMulti/types.jl
 # Note: we define type aliases outside of the @muladd block to avoid Revise breaking when code
 # inside the @muladd block is edited. See https://github.com/trixi-framework/Trixi.jl/issues/801
 # for more details.
 
 # `PointCloudSolver` refers to both multiple RBFSolver types (polynomial/SBP, simplices/quads/hexes) as well as
 # the use of multi-dimensional operators in the solver.
-const PointCloudSolver{NDIMS, ElemType, ApproxType, SurfaceIntegral, VolumeIntegral} = RBFSolver{
-                                                                                                 <:RefPointData{
-                                                                                                                NDIMS,
-                                                                                                                ElemType,
-                                                                                                                ApproxType
-                                                                                                                },
-                                                                                                 Mortar,
-                                                                                                 SurfaceIntegral,
-                                                                                                 VolumeIntegral
-                                                                                                 } where {
-                                                                                                          Mortar
-                                                                                                          }
+const PointCloudSolver{NDIMS, ElemType, ApproxType, Engine} = RBFSolver{<:RefPointData{NDIMS,
+                                                                                       ElemType,
+                                                                                       ApproxType},
+                                                                        Engine} where {
+                                                                                       Mortar
+                                                                                       }
 
 # Type aliases. The first parameter is `ApproxType` since it is more commonly used for dispatch.
 # const DGMultiWeakForm{ApproxType, ElemType} = PointCloudSolver{NDIMS, ElemType, ApproxType,
@@ -44,10 +39,8 @@ Base.real(rd::RefPointData) = eltype(rd.r)
 """
     PointCloudSolver(; polydeg::Integer,
               element_type::AbstractElemShape,
-              approximation_type=Polynomial(),
-              surface_flux=flux_central,
-              surface_integral=SurfaceIntegralWeakForm(surface_flux),
-              volume_integral=VolumeIntegralWeakForm(),
+              approximation_type=RBF(),
+              engine=RBFFDEngine(),
               RefElemData_kwargs...)
 
 Create a discontinuous Galerkin method which uses
@@ -55,59 +48,40 @@ Create a discontinuous Galerkin method which uses
 - element type `element_type` (`Tri()`, `Quad()`, `Tet()`, and `Hex()` currently supported)
 
 Optional:
-- `approximation_type` (default is `Polynomial()`; `SBP()` also supported for `Tri()`, `Quad()`,
+- `approximation_type` (default is `RBF()`; `SBP()` also supported for `Tri()`, `Quad()`,
   and `Hex()` element types).
 - `RefElemData_kwargs` are additional keyword arguments for `RefPointData`, such as `quad_rule_vol`.
   For more info, see the [StartUpDG.jl docs](https://jlchan.github.io/StartUpDG.jl/dev/).
 """
 function PointCloudSolver(; polydeg = nothing,
                           element_type::AbstractElemShape,
-                          approximation_type = Polynomial(),
-                          surface_flux = flux_central,
-                          surface_integral = SurfaceIntegralWeakForm(surface_flux),
-                          volume_integral = VolumeIntegralWeakForm(),
+                          approximation_type = RBF(),
+                          engine = RBFFDEngine(),
                           kwargs...)
 
     # call dispatchable constructor
-    PointCloudSolver(element_type, approximation_type, volume_integral,
-                     surface_integral;
+    PointCloudSolver(element_type, approximation_type, engine,
                      polydeg = polydeg, kwargs...)
-end
-
-# dispatchable constructor for PointCloudSolver using a TensorProductWedge
-function PointCloudSolver(element_type::Wedge,
-                          approximation_type,
-                          volume_integral,
-                          surface_integral;
-                          polydeg::Tuple,
-                          kwargs...)
-    factor_a = RefPointData(Tri(), approximation_type, polydeg[1]; kwargs...)
-    factor_b = RefPointData(Line(), approximation_type, polydeg[2]; kwargs...)
-
-    tensor = TensorProductWedge(factor_a, factor_b)
-    rd = RefPointData(element_type, tensor; kwargs...)
-    return RBFSolver(rd, nothing, surface_integral, volume_integral)
 end
 
 # dispatchable constructor for PointCloudSolver to allow for specialization
 function PointCloudSolver(element_type::AbstractElemShape,
                           approximation_type,
-                          volume_integral,
-                          surface_integral;
+                          engine,
                           polydeg::Integer,
                           kwargs...)
     rd = RefPointData(element_type, approximation_type, polydeg; kwargs...)
     # `nothing` is passed as `mortar`
-    return RBFSolver(rd, nothing, surface_integral, volume_integral)
+    return RBFSolver(rd, engine)
 end
 
-function PointCloudSolver(basis::RefPointData; volume_integral, surface_integral)
+function PointCloudSolver(basis::RefPointData; engine, surface_integral)
     # `nothing` is passed as `mortar`
-    RBFSolver(basis, nothing, surface_integral, volume_integral)
+    RBFSolver(basis, engine)
 end
 
 """
-    DGMultiBasis(element_type, polydeg; approximation_type = Polynomial(), kwargs...)
+    DGMultiBasis(element_type, polydeg; approximation_type = RBF(), kwargs...)
 
 Constructs a basis for PointCloudSolver solvers. Returns a "StartUpDG.RefPointData" object.
   The `kwargs` arguments are additional keyword arguments for `RefPointData`, such as `quad_rule_vol`.
@@ -115,7 +89,7 @@ Constructs a basis for PointCloudSolver solvers. Returns a "StartUpDG.RefPointDa
   For more info, see the [StartUpDG.jl docs](https://jlchan.github.io/StartUpDG.jl/dev/).
 
 """
-function DGMultiBasis(element_type, polydeg; approximation_type = Polynomial(),
+function DGMultiBasis(element_type, polydeg; approximation_type = RBF(),
                       kwargs...)
     RefPointData(element_type, approximation_type, polydeg; kwargs...)
 end
@@ -156,7 +130,7 @@ end
 GeometricTermsType(mesh_type::Curved, element_type::AbstractElemShape) = NonAffine()
 
 # other potential constructor types to add later: Bilinear, Isoparametric{polydeg_geo}, Rational/Exact?
-# other potential mesh types to add later: Polynomial{polydeg_geo}?
+# other potential mesh types to add later: RBF{polydeg_geo}?
 
 """
     PointCloudDomain(solver::PointCloudSolver{NDIMS}, vertex_coordinates, EToV;
@@ -242,39 +216,6 @@ function PointCloudDomain(solver::PointCloudSolver{NDIMS}, cells_per_dimension;
     end
     boundary_faces = StartUpDG.tag_boundary_faces(md, is_on_boundary)
     return PointCloudDomain(solver, GeometricTermsType(Cartesian(), solver), md,
-                            boundary_faces)
-end
-
-"""
-    PointCloudDomain(solver::PointCloudSolver{NDIMS}, cells_per_dimension, mapping;
-                is_on_boundary=nothing,
-                periodicity=ntuple(_ -> false, NDIMS), kwargs...) where {NDIMS}
-
-Constructs a `Curved()` [`PointCloudDomain`](@ref) with element type `solver.basis.element_type`.
-- `mapping` is a function which maps from a reference [-1, 1]^NDIMS domain to a mapped domain,
-   e.g., `xy = mapping(x, y)` in 2D.
-- `is_on_boundary` specifies boundary using a `Dict{Symbol, <:Function}`
-- `periodicity` is a tuple of `Bool`s specifying periodicity = `true`/`false` in the (x,y,z) direction.
-"""
-function PointCloudDomain(solver::PointCloudSolver{NDIMS}, cells_per_dimension, mapping;
-                          is_on_boundary = nothing,
-                          periodicity = ntuple(_ -> false, NDIMS),
-                          kwargs...) where {NDIMS}
-    vertex_coordinates, EToV = StartUpDG.uniform_mesh(solver.basis.element_type,
-                                                      cells_per_dimension...)
-    md = MeshData(vertex_coordinates, EToV, solver.basis)
-    md = NDIMS == 1 ? StartUpDG.make_periodic(md, periodicity...) :
-         StartUpDG.make_periodic(md, periodicity)
-
-    @unpack xyz = md
-    for i in eachindex(xyz[1])
-        new_xyz = mapping(getindex.(xyz, i)...)
-        setindex!.(xyz, new_xyz, i)
-    end
-    md_curved = MeshData(solver.basis, md, xyz...)
-
-    boundary_faces = StartUpDG.tag_boundary_faces(md_curved, is_on_boundary)
-    return PointCloudDomain(solver, GeometricTermsType(Curved(), solver), md_curved,
                             boundary_faces)
 end
 

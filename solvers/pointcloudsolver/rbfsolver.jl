@@ -1,3 +1,4 @@
+# Based on Trixi/src/solvers/DGMulti/dg.jl
 # By default, Julia/LLVM does not use fused multiply-add operations (FMAs).
 # Since these FMAs can increase the performance of many numerical algorithms,
 # we need to opt-in explicitly.
@@ -288,21 +289,21 @@ function max_dt(u, t, domain::PointCloudDomain,
     return 2 * dt_min * dt_polydeg_scaling(solver)
 end
 
-# interpolates from solution coefficients to face quadrature points
-# We pass the `surface_integral` argument solely for dispatch
-function prolong2interfaces!(cache, u, domain::PointCloudDomain, equations,
-                             surface_integral, solver::PointCloudSolver)
-    rd = solver.basis
-    @unpack u_face_values = cache
-    apply_to_each_field(mul_by!(rd.Vf), u_face_values, u)
-end
+# # interpolates from solution coefficients to face quadrature points
+# # We pass the `surface_integral` argument solely for dispatch
+# function prolong2interfaces!(cache, u, domain::PointCloudDomain, equations,
+#                              surface_integral, solver::PointCloudSolver)
+#     rd = solver.basis
+#     @unpack u_face_values = cache
+#     apply_to_each_field(mul_by!(rd.Vf), u_face_values, u)
+# end
 
 # version for affine meshes
-function calc_volume_integral!(du, u, domain::PointCloudDomain,
-                               have_nonconservative_terms::False, equations,
-                               volume_integral::VolumeIntegralWeakForm,
-                               solver::PointCloudSolver,
-                               cache)
+function calc_fluxes!(du, u, domain::PointCloudDomain,
+                      have_nonconservative_terms::False, equations,
+                      engine::RBFFDEngine,
+                      solver::PointCloudSolver,
+                      cache)
     rd = solver.basis
     md = domain.md
     @unpack weak_differentiation_matrices, dxidxhatj, u_values, local_values_threaded = cache
@@ -330,11 +331,11 @@ function calc_volume_integral!(du, u, domain::PointCloudDomain,
 end
 
 # version for curved meshes
-function calc_volume_integral!(du, u, domain::PointCloudDomain{NDIMS, <:NonAffine},
-                               have_nonconservative_terms::False, equations,
-                               volume_integral::VolumeIntegralWeakForm,
-                               solver::PointCloudSolver,
-                               cache) where {NDIMS}
+function calc_fluxes!(du, u, domain::PointCloudDomain{NDIMS, <:NonAffine},
+                      have_nonconservative_terms::False, equations,
+                      engine::RBFFDEngine,
+                      solver::PointCloudSolver,
+                      cache) where {NDIMS}
     rd = solver.basis
     (; weak_differentiation_matrices, u_values) = cache
     (; dxidxhatj) = cache
@@ -433,45 +434,45 @@ function calc_interface_flux!(cache, surface_integral::SurfaceIntegralWeakForm,
     end
 end
 
-# assumes cache.flux_face_values is computed and filled with
-# for polyomial discretizations, use dense LIFT matrix for surface contributions.
-function calc_surface_integral!(du, u, domain::PointCloudDomain, equations,
-                                surface_integral::SurfaceIntegralWeakForm,
-                                solver::PointCloudSolver, cache)
-    rd = solver.basis
-    apply_to_each_field(mul_by_accum!(rd.LIFT), du, cache.flux_face_values)
-end
+# # assumes cache.flux_face_values is computed and filled with
+# # for polyomial discretizations, use dense LIFT matrix for surface contributions.
+# function calc_surface_integral!(du, u, domain::PointCloudDomain, equations,
+#                                 surface_integral::SurfaceIntegralWeakForm,
+#                                 solver::PointCloudSolver, cache)
+#     rd = solver.basis
+#     apply_to_each_field(mul_by_accum!(rd.LIFT), du, cache.flux_face_values)
+# end
 
-# Specialize for nodal SBP discretizations. Uses that Vf*u = u[Fmask,:]
-# We pass the `surface_integral` argument solely for dispatch
-function prolong2interfaces!(cache, u, domain::PointCloudDomain, equations,
-                             surface_integral,
-                             solver::DGMultiSBP)
-    rd = solver.basis
-    @unpack Fmask = rd
-    @unpack u_face_values = cache
-    @threaded for e in eachelement(domain, solver, cache)
-        for (i, fid) in enumerate(Fmask)
-            u_face_values[i, e] = u[fid, e]
-        end
-    end
-end
+# # Specialize for nodal SBP discretizations. Uses that Vf*u = u[Fmask,:]
+# # We pass the `surface_integral` argument solely for dispatch
+# function prolong2interfaces!(cache, u, domain::PointCloudDomain, equations,
+#                              surface_integral,
+#                              solver::DGMultiSBP)
+#     rd = solver.basis
+#     @unpack Fmask = rd
+#     @unpack u_face_values = cache
+#     @threaded for e in eachelement(domain, solver, cache)
+#         for (i, fid) in enumerate(Fmask)
+#             u_face_values[i, e] = u[fid, e]
+#         end
+#     end
+# end
 
-# Specialize for nodal SBP discretizations. Uses that du = LIFT*u is equivalent to
-# du[Fmask,:] .= u ./ rd.wq[rd.Fmask]
-function calc_surface_integral!(du, u, domain::PointCloudDomain, equations,
-                                surface_integral::SurfaceIntegralWeakForm,
-                                solver::DGMultiSBP, cache)
-    rd = solver.basis
-    @unpack flux_face_values, lift_scalings = cache
+# # Specialize for nodal SBP discretizations. Uses that du = LIFT*u is equivalent to
+# # du[Fmask,:] .= u ./ rd.wq[rd.Fmask]
+# function calc_surface_integral!(du, u, domain::PointCloudDomain, equations,
+#                                 surface_integral::SurfaceIntegralWeakForm,
+#                                 solver::DGMultiSBP, cache)
+#     rd = solver.basis
+#     @unpack flux_face_values, lift_scalings = cache
 
-    @threaded for e in eachelement(domain, solver, cache)
-        for i in each_face_node(domain, solver, cache)
-            fid = rd.Fmask[i]
-            du[fid, e] = du[fid, e] + flux_face_values[i, e] * lift_scalings[i]
-        end
-    end
-end
+#     @threaded for e in eachelement(domain, solver, cache)
+#         for i in each_face_node(domain, solver, cache)
+#             fid = rd.Fmask[i]
+#             du[fid, e] = du[fid, e] + flux_face_values[i, e] * lift_scalings[i]
+#         end
+#     end
+# end
 
 # do nothing for periodic (default) boundary conditions
 function calc_boundary_flux!(cache, t, boundary_conditions::BoundaryConditionPeriodic,
@@ -591,51 +592,47 @@ function calc_single_boundary_flux!(cache, t, boundary_condition, boundary_key, 
     # However, we don't have to re-reshape, since cache.flux_face_values still retains its original shape.
 end
 
-# inverts Jacobian and scales by -1.0
-function invert_jacobian!(du, domain::PointCloudDomain, equations,
-                          solver::PointCloudSolver, cache;
-                          scaling = -1)
-    @threaded for e in eachelement(domain, solver, cache)
-        invJ = cache.invJ[1, e]
-        for i in axes(du, 1)
-            du[i, e] *= scaling * invJ
-        end
-    end
-end
+# # inverts Jacobian and scales by -1.0
+# function invert_jacobian!(du, domain::PointCloudDomain, equations,
+#                           solver::PointCloudSolver, cache;
+#                           scaling = -1)
+#     @threaded for e in eachelement(domain, solver, cache)
+#         invJ = cache.invJ[1, e]
+#         for i in axes(du, 1)
+#             du[i, e] *= scaling * invJ
+#         end
+#     end
+# end
 
-# inverts Jacobian using weight-adjusted DG, and scales by -1.0.
-# - Chan, Jesse, Russell J. Hewett, and Timothy Warburton.
-#   "Weight-adjusted discontinuous Galerkin methods: curvilinear meshes."
-#   https://doi.org/10.1137/16M1089198
-function invert_jacobian!(du, domain::PointCloudDomain{NDIMS, <:NonAffine}, equations,
-                          solver::PointCloudSolver, cache; scaling = -1) where {NDIMS}
-    # Vq = interpolation matrix to quadrature points, Pq = quadrature-based L2 projection matrix
-    (; Pq, Vq) = solver.basis
-    (; local_values_threaded, invJ) = cache
+# # inverts Jacobian using weight-adjusted DG, and scales by -1.0.
+# # - Chan, Jesse, Russell J. Hewett, and Timothy Warburton.
+# #   "Weight-adjusted discontinuous Galerkin methods: curvilinear meshes."
+# #   https://doi.org/10.1137/16M1089198
+# function invert_jacobian!(du, domain::PointCloudDomain{NDIMS, <:NonAffine}, equations,
+#                           solver::PointCloudSolver, cache; scaling = -1) where {NDIMS}
+#     # Vq = interpolation matrix to quadrature points, Pq = quadrature-based L2 projection matrix
+#     (; Pq, Vq) = solver.basis
+#     (; local_values_threaded, invJ) = cache
 
-    @threaded for e in eachelement(domain, solver, cache)
-        du_at_quad_points = local_values_threaded[Threads.threadid()]
+#     @threaded for e in eachelement(domain, solver, cache)
+#         du_at_quad_points = local_values_threaded[Threads.threadid()]
 
-        # interpolate solution to quadrature
-        apply_to_each_field(mul_by!(Vq), du_at_quad_points, view(du, :, e))
+#         # interpolate solution to quadrature
+#         apply_to_each_field(mul_by!(Vq), du_at_quad_points, view(du, :, e))
 
-        # scale by quadrature points
-        for i in eachindex(du_at_quad_points)
-            du_at_quad_points[i] *= scaling * invJ[i, e]
-        end
+#         # scale by quadrature points
+#         for i in eachindex(du_at_quad_points)
+#             du_at_quad_points[i] *= scaling * invJ[i, e]
+#         end
 
-        # project back to polynomials
-        apply_to_each_field(mul_by!(Pq), view(du, :, e), du_at_quad_points)
-    end
-end
+#         # project back to polynomials
+#         apply_to_each_field(mul_by!(Pq), view(du, :, e), du_at_quad_points)
+#     end
+# end
 
 # Multiple calc_sources! to resolve method ambiguities
 function calc_sources!(du, u, t, source_terms::Nothing,
                        domain, equations, solver::PointCloudSolver, cache)
-    nothing
-end
-function calc_sources!(du, u, t, source_terms::Nothing,
-                       domain, equations, solver::DGMultiFluxDiffSBP, cache)
     nothing
 end
 
@@ -664,16 +661,16 @@ function rhs!(du, u, t, domain, equations,
               solver::PointCloudSolver, cache) where {BC, Source}
     @trixi_timeit timer() "reset ∂u/∂t" reset_du!(du, solver, cache)
 
-    @trixi_timeit timer() "volume integral" begin
-        calc_volume_integral!(du, u, domain,
-                              have_nonconservative_terms(equations), equations,
-                              solver.volume_integral, solver, cache)
+    @trixi_timeit timer() "calc fluxes" begin
+        calc_fluxes!(du, u, domain,
+                     have_nonconservative_terms(equations), equations,
+                     solver.engine, solver, cache)
     end
 
-    @trixi_timeit timer() "prolong2interfaces" begin
-        prolong2interfaces!(cache, u, domain, equations, solver.surface_integral,
-                            solver)
-    end
+    # @trixi_timeit timer() "prolong2interfaces" begin
+    #     prolong2interfaces!(cache, u, domain, equations, solver.surface_integral,
+    #                         solver)
+    # end
 
     @trixi_timeit timer() "interface flux" begin
         calc_interface_flux!(cache, solver.surface_integral, domain,
@@ -685,13 +682,13 @@ function rhs!(du, u, t, domain, equations,
                             have_nonconservative_terms(equations), equations, solver)
     end
 
-    @trixi_timeit timer() "surface integral" begin
-        calc_surface_integral!(du, u, domain, equations, solver.surface_integral,
-                               solver, cache)
-    end
+    # @trixi_timeit timer() "surface integral" begin
+    #     calc_surface_integral!(du, u, domain, equations, solver.surface_integral,
+    #                            solver, cache)
+    # end
 
-    @trixi_timeit timer() "Jacobian" invert_jacobian!(du, domain, equations, solver,
-                                                      cache)
+    # @trixi_timeit timer() "Jacobian" invert_jacobian!(du, domain, equations, solver,
+    #                                                   cache)
 
     @trixi_timeit timer() "source terms" begin
         calc_sources!(du, u, t, source_terms, domain, equations, solver, cache)
