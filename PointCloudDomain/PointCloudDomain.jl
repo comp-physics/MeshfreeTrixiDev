@@ -17,7 +17,7 @@ function PointData(points::Vector{Tv},
                                                          Tv <: SVector{Dim, Float64},
                                                          Ti
                                                          }
-    new{Dim, Tv, Ti}(points, neighbors, length(points), length(neighbors[1]))
+    PointData{Dim, Tv, Ti}(points, neighbors, length(points), length(neighbors[1]))
 end
 
 struct BoundaryData{Ti <: Integer, Tv <: SVector{N, T} where {N, T <: Number}}
@@ -31,7 +31,7 @@ end
 # end
 struct PointCloudDomain{NDIMS, PointDataT <: PointData{NDIMS}, BoundaryFaceT}
     pd::PointDataT
-    boundary_faces::BoundaryFaceT
+    boundary_tags::BoundaryFaceT
 end
 
 function PointCloudDomain(points::Vector{Tv}, neighbors::Vector{Vector{Ti}},
