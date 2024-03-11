@@ -33,7 +33,8 @@ function Base.summary(io::IO, solver::RBFSolver) where {RBFSolver <: PointCloudS
 end
 
 # real(rd) is the eltype of the nodes `rd.r`.
-Base.real(rd::RefPointData) = eltype(rd.r)
+# Base.real(rd::RefPointData) = eltype(rd.r)
+Base.real(rd::RefPointData) = Float64
 # Currently RefPointData does not have eltype
 
 """

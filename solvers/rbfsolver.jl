@@ -20,7 +20,7 @@ end
     RBFFDEngine()
 
 The classical RBF-FD backend type for meshfree methods as explained in
-standard textbooks.
+standard textbooks. Replaces VolumeIntegralWeakForm()
 
 ## References
 
