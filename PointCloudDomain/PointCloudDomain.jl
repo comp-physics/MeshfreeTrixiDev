@@ -69,7 +69,7 @@ function PointCloudDomain(points::Vector{Tv}, neighbors::Vector{Vector{Ti}},
                             boundary_tags)
 end
 
-# Base.ndims(::PointCloudDomain{NDIMS}) where {NDIMS} = NDIMS
+Base.ndims(::PointCloudDomain{NDIMS}) where {NDIMS} = NDIMS
 
 # function Base.show(io::IO,
 #                    mesh::PointCloudDomain{NDIMS, MeshType}) where {NDIMS, MeshType}
@@ -78,7 +78,7 @@ end
 # end
 
 function Base.show(io::IO, mesh::PointCloudDomain{Dim, Tv, Ti}) where {Dim, Tv, Ti}
-    print(io, "PointCloudDomain with dimension = $Dim, point type = $Tv, index type = $Ti")
+    print(io, "PointCloudDomain with NDIMS = $Dim")
 end
 
 # function Base.show(io::IO, ::MIME"text/plain",
@@ -123,7 +123,7 @@ function Base.show(io::IO, ::MIME"text/plain",
 end
 
 function Base.show(io::IO, point_data::PointData{Dim, Tv, Ti}) where {Dim, Tv, Ti}
-    print(io, "PointData in $Dim dimensions, point type = $Tv, index type = $Ti")
+    print(io, "PointData with NDIMS = $Dim")
 end
 
 function Base.show(io::IO, ::MIME"text/plain",

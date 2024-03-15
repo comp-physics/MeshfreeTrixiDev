@@ -8,7 +8,6 @@
 
 # out <- A*x
 mul_by!(A) = @inline (out, x) -> matmul!(out, A, x)
-mul_by!(A::T) where {T <: SimpleKronecker} = @inline (out, x) -> mul!(out, A, x)
 mul_by!(A::AbstractSparseMatrix) = @inline (out, x) -> mul!(out, A, x)
 function mul_by!(A::LinearAlgebra.AdjOrTrans{T, S}) where {T, S <: AbstractSparseMatrix}
     @inline (out, x) -> mul!(out, A, x)
@@ -55,7 +54,7 @@ In particular, not the dimensions themselves are returned.
 # iteration over all elements in a domain
 @inline function ndofs(domain::PointCloudDomain, solver::PointCloudSolver,
                        other_args...)
-    solver.basis.Np * domain.md.num_elements
+    domain.pd.num_points
 end
 """
     eachelement(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
@@ -66,72 +65,72 @@ In particular, not the elements themselves are returned.
 """
 @inline function eachelement(domain::PointCloudDomain, solver::PointCloudSolver,
                              other_args...)
-    Base.OneTo(domain.md.num_elements)
+    Base.OneTo(domain.pd.num_points)
 end
 
 # iteration over quantities in a single element
-@inline nnodes(basis::RefPointData) = basis.Np
+@inline nnodes(basis::RefPointData) = basis.nv # synonymous for number of neighbors
 
-"""
-    each_face_node(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
+# """
+#     each_face_node(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
 
-Return an iterator over the indices that specify the location in relevant data structures
-for the face nodes in `solver`.
-In particular, not the face_nodes themselves are returned.
-"""
-@inline function each_face_node(domain::PointCloudDomain, solver::PointCloudSolver,
-                                other_args...)
-    Base.OneTo(solver.basis.Nfq)
-end
+# Return an iterator over the indices that specify the location in relevant data structures
+# for the face nodes in `solver`.
+# In particular, not the face_nodes themselves are returned.
+# """
+# @inline function each_face_node(domain::PointCloudDomain, solver::PointCloudSolver,
+#                                 other_args...)
+#     Base.OneTo(solver.basis.Nfq)
+# end
 
-"""
-    each_quad_node(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
+# """
+#     each_quad_node(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
 
-Return an iterator over the indices that specify the location in relevant data structures
-for the quadrature nodes in `solver`.
-In particular, not the quadrature nodes themselves are returned.
-"""
-@inline function each_quad_node(domain::PointCloudDomain, solver::PointCloudSolver,
-                                other_args...)
-    Base.OneTo(solver.basis.Nq)
-end
+# Return an iterator over the indices that specify the location in relevant data structures
+# for the quadrature nodes in `solver`.
+# In particular, not the quadrature nodes themselves are returned.
+# """
+# @inline function each_quad_node(domain::PointCloudDomain, solver::PointCloudSolver,
+#                                 other_args...)
+#     Base.OneTo(solver.basis.Nq)
+# end
 
-# iteration over quantities over the entire domain (dofs, quad nodes, face nodes).
-"""
-    each_dof_global(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
+# # iteration over quantities over the entire domain (dofs, quad nodes, face nodes).
+# """
+#     each_dof_global(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
 
-Return an iterator over the indices that specify the location in relevant data structures
-for the degrees of freedom (DOF) in `solver`.
-In particular, not the DOFs themselves are returned.
-"""
-@inline function each_dof_global(domain::PointCloudDomain, solver::PointCloudSolver,
-                                 other_args...)
-    Base.OneTo(ndofs(domain, solver, other_args...))
-end
+# Return an iterator over the indices that specify the location in relevant data structures
+# for the degrees of freedom (DOF) in `solver`.
+# In particular, not the DOFs themselves are returned.
+# """
+# @inline function each_dof_global(domain::PointCloudDomain, solver::PointCloudSolver,
+#                                  other_args...)
+#     Base.OneTo(ndofs(domain, solver, other_args...))
+# end
 
-"""
-    each_quad_node_global(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
+# """
+#     each_quad_node_global(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
 
-Return an iterator over the indices that specify the location in relevant data structures
-for the global quadrature nodes in `domain`.
-In particular, not the quadrature nodes themselves are returned.
-"""
-@inline function each_quad_node_global(domain::PointCloudDomain,
-                                       solver::PointCloudSolver, other_args...)
-    Base.OneTo(solver.basis.Nq * domain.md.num_elements)
-end
+# Return an iterator over the indices that specify the location in relevant data structures
+# for the global quadrature nodes in `domain`.
+# In particular, not the quadrature nodes themselves are returned.
+# """
+# @inline function each_quad_node_global(domain::PointCloudDomain,
+#                                        solver::PointCloudSolver, other_args...)
+#     Base.OneTo(solver.basis.Nq * domain.md.num_elements)
+# end
 
-"""
-    each_face_node_global(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
+# """
+#     each_face_node_global(domain::PointCloudDomain, solver::PointCloudSolver, other_args...)
 
-Return an iterator over the indices that specify the location in relevant data structures
-for the face nodes in `domain`.
-In particular, not the face nodes themselves are returned.
-"""
-@inline function each_face_node_global(domain::PointCloudDomain,
-                                       solver::PointCloudSolver, other_args...)
-    Base.OneTo(solver.basis.Nfq * domain.md.num_elements)
-end
+# Return an iterator over the indices that specify the location in relevant data structures
+# for the face nodes in `domain`.
+# In particular, not the face nodes themselves are returned.
+# """
+# @inline function each_face_node_global(domain::PointCloudDomain,
+#                                        solver::PointCloudSolver, other_args...)
+#     Base.OneTo(solver.basis.Nfq * domain.md.num_elements)
+# end
 
 # interface with semidiscretization_hyperbolic
 wrap_array(u_ode, domain::PointCloudDomain, equations, solver::PointCloudSolver, cache) = u_ode
@@ -160,7 +159,55 @@ function reset_du!(du, solver::PointCloudSolver, other_args...)
     return du
 end
 
-# Constructs cache variables for both affine and non-affine (curved) DGMultiMeshes
+# # Constructs cache variables for both affine and non-affine (curved) DGMultiMeshes
+# function create_cache(domain::PointCloudDomain{NDIMS}, equations,
+#                       solver::DGMultiWeakForm, RealT,
+#                       uEltype) where {NDIMS}
+#     rd = solver.basis
+#     md = domain.md
+
+#     # volume quadrature weights, volume interpolation matrix, mass matrix, differentiation matrices
+#     @unpack wq, Vq, M, Drst = rd
+
+#     # ∫f(u) * dv/dx_i = ∑_j (Vq*Drst[i])'*diagm(wq)*(rstxyzJ[i,j].*f(Vq*u))
+#     weak_differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
+
+#     nvars = nvariables(equations)
+
+#     # storage for volume quadrature values, face quadrature values, flux values
+#     u_values = allocate_nested_array(uEltype, nvars, size(md.xq), solver)
+#     u_face_values = allocate_nested_array(uEltype, nvars, size(md.xf), solver)
+#     flux_face_values = allocate_nested_array(uEltype, nvars, size(md.xf), solver)
+#     if typeof(rd.approximation_type) <:
+#        Union{SBP, AbstractNonperiodicDerivativeOperator}
+#         lift_scalings = rd.wf ./ rd.wq[rd.Fmask] # lift scalings for diag-norm SBP operators
+#     else
+#         lift_scalings = nothing
+#     end
+
+#     # local storage for volume integral and source computations
+#     local_values_threaded = [allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
+#                              for _ in 1:Threads.nthreads()]
+
+#     # For curved meshes, we interpolate geometric terms from nodal points to quadrature points.
+#     # For affine meshes, we just access one element of this interpolated data.
+#     dxidxhatj = map(x -> rd.Vq * x, md.rstxyzJ)
+
+#     # interpolate J to quadrature points for weight-adjusted DG (WADG)
+#     invJ = inv.(rd.Vq * md.J)
+
+#     # for scaling by curved geometric terms (not used by affine PointCloudDomain)
+#     flux_threaded = [[allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
+#                       for _ in 1:NDIMS] for _ in 1:Threads.nthreads()]
+#     rotated_flux_threaded = [allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
+#                              for _ in 1:Threads.nthreads()]
+
+#     return (; md, weak_differentiation_matrices, lift_scalings, invJ, dxidxhatj,
+#             u_values, u_face_values, flux_face_values,
+#             local_values_threaded, flux_threaded, rotated_flux_threaded)
+# end
+
+# Constructs cache variables for PointCloudDomains
 function create_cache(domain::PointCloudDomain{NDIMS}, equations,
                       solver::DGMultiWeakForm, RealT,
                       uEltype) where {NDIMS}
