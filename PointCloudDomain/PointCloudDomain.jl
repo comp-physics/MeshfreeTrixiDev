@@ -122,6 +122,83 @@ function Base.show(io::IO, ::MIME"text/plain",
     end
 end
 
+function Base.show(io::IO, point_data::PointData{Dim, Tv, Ti}) where {Dim, Tv, Ti}
+    print(io, "PointData in $Dim dimensions, point type = $Tv, index type = $Ti")
+end
+
+function Base.show(io::IO, ::MIME"text/plain",
+                   point_data::PointData{Dim, Tv, Ti}) where {Dim, Tv, Ti}
+    if get(io, :compact, false)
+        show(io, point_data)
+    else
+        num_points_to_show = 5
+
+        summary_header(io, "PointData{$Dim}")
+        summary_line(io, "Number of points", point_data.num_points)
+        summary_line(io, "Vector type of points", "$(eltype(point_data.points))")
+        summary_line(io, "Number of neighbors per point", point_data.num_neighbors)
+
+        # Show a sample of points
+        # summary_line(io, "First points", "")
+        for i in 1:min(num_points_to_show, point_data.num_points)
+            summary_line(increment_indent(io), "Point $i", "$(point_data.points[i])")
+        end
+        if point_data.num_points > num_points_to_show
+            summary_line(increment_indent(io), "...", "...")
+            # Optionally, show a few points from the end if the list is long
+            for i in (point_data.num_points - num_points_to_show + 1):(point_data.num_points)
+                summary_line(increment_indent(io), "Point $i", "$(point_data.points[i])")
+            end
+        end
+
+        # Optionally, include similar logic for showing a sample of neighbor lists if desired
+
+        summary_footer(io)
+    end
+end
+
+function Base.show(io::IO, boundary_data::BoundaryData{Ti, Tv}) where {Ti, Tv}
+    print(io, "BoundaryData with index type = $Ti, normal type = $Tv")
+end
+
+function Base.show(io::IO, ::MIME"text/plain",
+                   boundary_data::BoundaryData{Ti, Tv}) where {Ti, Tv}
+    if get(io, :compact, false)
+        show(io, boundary_data)
+    else
+        num_normals_to_show_start = 3
+        num_normals_to_show_end = 2
+
+        # Assuming you have a similar summary utilities as in the previous example
+        summary_header(io, "BoundaryData")
+        summary_line(io, "Number of boundary points", length(boundary_data.idx))
+        summary_line(io, "Vector type of normals", "$(eltype(boundary_data.normals))")
+
+        # Check how many normals there are
+        num_normals = length(boundary_data.normals)
+        if num_normals > num_normals_to_show_start + num_normals_to_show_end
+            # Show the first few normals
+            for i in 1:num_normals_to_show_start
+                summary_line(increment_indent(io), "Normal $i",
+                             "$(boundary_data.normals[i])")
+            end
+            summary_line(increment_indent(io), "Normal ...", "...")
+            # Show the last few normals
+            for i in (num_normals - num_normals_to_show_end + 1):num_normals
+                summary_line(increment_indent(io), "Normal $i",
+                             "$(boundary_data.normals[i])")
+            end
+        else
+            # If there aren't many normals, just show all of them
+            for i in 1:num_normals
+                summary_line(io, "Normal $i", "$(boundary_data.normals[i])")
+            end
+        end
+
+        summary_footer(io)
+    end
+end
+
 # Update this and MeshData to make our PointCloudDomain interface
 # consistent with Trixi
 #
