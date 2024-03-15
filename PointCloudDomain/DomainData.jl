@@ -1,3 +1,7 @@
+### Rework this to be PointData if we end up keeping it.
+# Currently using our own PointData struct in
+# PointCloudDomain/PointCloudDomain.jl
+# Based on MeshData struct from StartUpDG.
 """
     struct DomainData{Dim, Tv, Ti}
 

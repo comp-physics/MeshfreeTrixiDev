@@ -277,79 +277,79 @@ function allocate_coefficients(domain::AbstractDomain, equations, solver::RBFSol
           nelements(solver, cache))
 end
 
-@inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
-                            solver::RBFSolverSEM, cache)
-    @boundscheck begin
-        @assert length(u_ode) ==
-                nvariables(equations) * nnodes(solver)^ndims(domain) *
-                nelements(solver, cache)
-    end
-    # We would like to use
-    #     reshape(u_ode, (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))..., nelements(solver, cache)))
-    # but that results in
-    #     ERROR: LoadError: cannot resize array with shared data
-    # when we resize! `u_ode` during AMR.
-    #
-    # !!! danger "Segfaults"
-    #     Remember to `GC.@preserve` temporaries such as copies of `u_ode`
-    #     and other stuff that is only used indirectly via `wrap_array` afterwards!
+# @inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
+#                             solver::RBFSolverSEM, cache)
+#     @boundscheck begin
+#         @assert length(u_ode) ==
+#                 nvariables(equations) * nnodes(solver)^ndims(domain) *
+#                 nelements(solver, cache)
+#     end
+#     # We would like to use
+#     #     reshape(u_ode, (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))..., nelements(solver, cache)))
+#     # but that results in
+#     #     ERROR: LoadError: cannot resize array with shared data
+#     # when we resize! `u_ode` during AMR.
+#     #
+#     # !!! danger "Segfaults"
+#     #     Remember to `GC.@preserve` temporaries such as copies of `u_ode`
+#     #     and other stuff that is only used indirectly via `wrap_array` afterwards!
 
-    # Currently, there are problems when AD is used with `PtrArray`s in broadcasts
-    # since LoopVectorization does not support `ForwardDiff.Dual`s. Hence, we use
-    # optimized `PtrArray`s whenever possible and fall back to plain `Array`s
-    # otherwise.
-    if LoopVectorization.check_args(u_ode)
-        # This version using `PtrArray`s from StrideArrays.jl is very fast and
-        # does not result in allocations.
-        #
-        # !!! danger "Heisenbug"
-        #     Do not use this code when `@threaded` uses `Threads.@threads`. There is
-        #     a very strange Heisenbug that makes some parts very slow *sometimes*.
-        #     In fact, everything can be fast and fine for many cases but some parts
-        #     of the RHS evaluation can take *exactly* (!) five seconds randomly...
-        #     Hence, this version should only be used when `@threaded` is based on
-        #     `@batch` from Polyester.jl or something similar. Using Polyester.jl
-        #     is probably the best option since everything will be handed over to
-        #     Chris Elrod, one of the best performance software engineers for Julia.
-        PtrArray(pointer(u_ode),
-                 (StaticInt(nvariables(equations)),
-                  ntuple(_ -> StaticInt(nnodes(solver)), ndims(domain))...,
-                  nelements(solver, cache)))
-        #  (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))..., nelements(solver, cache)))
-    else
-        # The following version is reasonably fast and allows us to `resize!(u_ode, ...)`.
-        unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
-                    (nvariables(equations),
-                     ntuple(_ -> nnodes(solver), ndims(domain))...,
-                     nelements(solver, cache)))
-    end
-end
+#     # Currently, there are problems when AD is used with `PtrArray`s in broadcasts
+#     # since LoopVectorization does not support `ForwardDiff.Dual`s. Hence, we use
+#     # optimized `PtrArray`s whenever possible and fall back to plain `Array`s
+#     # otherwise.
+#     if LoopVectorization.check_args(u_ode)
+#         # This version using `PtrArray`s from StrideArrays.jl is very fast and
+#         # does not result in allocations.
+#         #
+#         # !!! danger "Heisenbug"
+#         #     Do not use this code when `@threaded` uses `Threads.@threads`. There is
+#         #     a very strange Heisenbug that makes some parts very slow *sometimes*.
+#         #     In fact, everything can be fast and fine for many cases but some parts
+#         #     of the RHS evaluation can take *exactly* (!) five seconds randomly...
+#         #     Hence, this version should only be used when `@threaded` is based on
+#         #     `@batch` from Polyester.jl or something similar. Using Polyester.jl
+#         #     is probably the best option since everything will be handed over to
+#         #     Chris Elrod, one of the best performance software engineers for Julia.
+#         PtrArray(pointer(u_ode),
+#                  (StaticInt(nvariables(equations)),
+#                   ntuple(_ -> StaticInt(nnodes(solver)), ndims(domain))...,
+#                   nelements(solver, cache)))
+#         #  (nvariables(equations), ntuple(_ -> nnodes(solver), ndims(domain))..., nelements(solver, cache)))
+#     else
+#         # The following version is reasonably fast and allows us to `resize!(u_ode, ...)`.
+#         unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
+#                     (nvariables(equations),
+#                      ntuple(_ -> nnodes(solver), ndims(domain))...,
+#                      nelements(solver, cache)))
+#     end
+# end
 
-# Finite difference summation by parts (FDSBP) methods
-@inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
-                            solver::FDSBP, cache)
-    @boundscheck begin
-        @assert length(u_ode) ==
-                nvariables(equations) * nnodes(solver)^ndims(domain) *
-                nelements(solver, cache)
-    end
-    # See comments on the RBFSolverSEM version above
-    if LoopVectorization.check_args(u_ode)
-        # Here, we do not specialize on the number of nodes using `StaticInt` since
-        # - it will not be type stable (SBP operators just store it as a runtime value)
-        # - FD methods tend to use high node counts
-        PtrArray(pointer(u_ode),
-                 (StaticInt(nvariables(equations)),
-                  ntuple(_ -> nnodes(solver), ndims(domain))...,
-                  nelements(solver, cache)))
-    else
-        # The following version is reasonably fast and allows us to `resize!(u_ode, ...)`.
-        unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
-                    (nvariables(equations),
-                     ntuple(_ -> nnodes(solver), ndims(domain))...,
-                     nelements(solver, cache)))
-    end
-end
+# # Finite difference summation by parts (FDSBP) methods
+# @inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,
+#                             solver::FDSBP, cache)
+#     @boundscheck begin
+#         @assert length(u_ode) ==
+#                 nvariables(equations) * nnodes(solver)^ndims(domain) *
+#                 nelements(solver, cache)
+#     end
+#     # See comments on the RBFSolverSEM version above
+#     if LoopVectorization.check_args(u_ode)
+#         # Here, we do not specialize on the number of nodes using `StaticInt` since
+#         # - it will not be type stable (SBP operators just store it as a runtime value)
+#         # - FD methods tend to use high node counts
+#         PtrArray(pointer(u_ode),
+#                  (StaticInt(nvariables(equations)),
+#                   ntuple(_ -> nnodes(solver), ndims(domain))...,
+#                   nelements(solver, cache)))
+#     else
+#         # The following version is reasonably fast and allows us to `resize!(u_ode, ...)`.
+#         unsafe_wrap(Array{eltype(u_ode), ndims(domain) + 2}, pointer(u_ode),
+#                     (nvariables(equations),
+#                      ntuple(_ -> nnodes(solver), ndims(domain))...,
+#                      nelements(solver, cache)))
+#     end
+# end
 
 # General fallback
 @inline function wrap_array(u_ode::AbstractVector, domain::AbstractDomain, equations,

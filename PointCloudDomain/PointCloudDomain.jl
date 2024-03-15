@@ -4,6 +4,9 @@ using Trixi: summary_header, summary_line, summary_footer, increment_indent
 
 includet("geometry_primatives.jl")
 
+# Similar to StartUpDG.MeshData
+# This is the underlying data structure for PointCloudDomain
+# Mostly reworked 
 struct PointData{Dim, Tv, Ti}
     points::Vector{Tv}                # Point coordinates
     neighbors::Vector{Vector{Ti}}     # Neighbors for each point
@@ -29,6 +32,7 @@ end
 #     pd::PointData{Dim, Tv, Ti}  # Encapsulates points and neighbors
 #     boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}  # Boundary data
 # end
+### Actual PointCloudDomain for dispatching problems with 
 struct PointCloudDomain{NDIMS, PointDataT <: PointData{NDIMS}, BoundaryFaceT}
     pd::PointDataT
     boundary_tags::BoundaryFaceT
