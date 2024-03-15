@@ -23,6 +23,24 @@ function PointData(points::Vector{Tv},
     PointData{Dim, Tv, Ti}(points, neighbors, length(points), length(neighbors[1]))
 end
 
+"""
+    PointData(medusa_data::Vector{Tv}, basis) where {Tv <: SVector{Dim, Float64}}
+
+- `medusa_data` contains point positions for entire point cloud.
+- `basis` contains all basis information including the number of required neighbors to support required order of accuracy.
+"""
+function PointData(medusa_data::Vector{Tv},
+                   basis::RefPointData) where {Dim, Tv <: SVector{Dim, Float64}}
+    nv = basis.nv  # The number of neighbors
+
+    # Calculate neighbor list for all points
+    kdtree = KDTree(medusa_data)
+    n_idxs, n_dists = knn(kdtree, medusa_data, nv, true)
+
+    # Instantiate PointData with the points and neighbors. The num_points and num_neighbors are automatically computed.
+    return PointData{Dim, Tv, Int}(medusa_data, n_idxs, length(medusa_data), nv)
+end
+
 struct BoundaryData{Ti <: Integer, Tv <: SVector{N, T} where {N, T <: Number}}
     idx::Vector{Ti}       # Indices of boundary points
     normals::Vector{Tv}   # Normals at boundary points

@@ -76,7 +76,7 @@ function PointCloudSolver(element_type::AbstractElemShape,
     return RBFSolver(rd, engine)
 end
 
-function PointCloudSolver(basis::RefPointData; engine)
+function PointCloudSolver(basis::RefPointData; engine = RBFFDEngine())
     # `nothing` is passed as `mortar`
     RBFSolver(basis, engine)
 end
@@ -101,11 +101,29 @@ end
 
 # now that `PointCloudSolver` is defined, we can define constructors for `PointCloudDomain` which use `solver::PointCloudSolver`
 
-function PointCloudDomain(solver::PointCloudSolver, geometric_term_type,
-                          pd::PointData{NDIMS},
-                          boundary_faces) where {NDIMS}
-    return PointCloudDomain{NDIMS, typeof(geometric_term_type), typeof(pd),
-                            typeof(boundary_faces)}(pd, boundary_faces)
+function PointCloudDomain(solver::PointCloudSolver, points::Vector{Tv},
+                          neighbors::Vector{Vector{Ti}},
+                          boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {
+                                                                                    N,
+                                                                                    Tv <:
+                                                                                    SVector{N,
+                                                                                            Float64},
+                                                                                    Ti
+                                                                                    }
+    return PointCloudDomain{NDIMS, typeof(points), typeof(neighbors),
+                            typeof(boundary_tags)}(points, neighbors, boundary_tags)
+end
+
+function PointCloudDomain(solver::PointCloudSolver, pd::PointData{NDIMS},
+                          boundary_tags::Dict{Symbol, BoundaryData{Ti, Tv}}) where {
+                                                                                    NDIMS,
+                                                                                    Tv <:
+                                                                                    SVector{NDIMS,
+                                                                                            Float64},
+                                                                                    Ti
+                                                                                    }
+    return PointCloudDomain{NDIMS, typeof(pd),
+                            typeof(boundary_tags)}(pd, boundary_tags)
 end
 
 # # Mesh types used internally for trait dispatch
@@ -178,12 +196,13 @@ end
 # treated as well. Big question is how to translate from expected "MeshData"
 # md object initialization and use to pd instead. 
 function PointCloudDomain(solver::PointCloudSolver{NDIMS},
-                          filename::String) where {NDIMS}
-    medusa_data = read_medusa_file{NDIMS}(filename)
+                          filename::String,
+                          boundary_names_dict::Dict{Symbol, Int}) where {NDIMS}
+    medusa_data, interior_idx, boundary_idxs, boundary_normals = read_medusa_file(filename)
     pd = PointData(medusa_data, solver.basis)
-    boundary_tags = Dict(Pair.(keys(pd.mesh_type.boundary_faces),
-                               values(pd.mesh_type.boundary_faces)))
-    return PointCloudDomain(solver, GeometricTermsType(Curved(), solver), pd,
+    boundary_tags = Dict(name => BoundaryData(boundary_idxs[idx], boundary_normals[idx])
+                         for (name, idx) in boundary_names_dict)
+    return PointCloudDomain(solver, pd,
                             boundary_tags)
 end
 

@@ -28,10 +28,10 @@ rd = RefPointData(Tri(), N)
 struct RefPointData{Dim, ElemShape <: AbstractElemShape{Dim}, ApproximationType,
                     NT, NV, F}
     element_type::ElemShape
-    approximation_type::ApproximationType # RBF / SBP{...}
+    approximation_type::ApproximationType # RBF / PHS{...}
 
-    N::NT               # polynomial degree of accuracy
-    nv::NV               # number of neighbors
+    N::NT              # polynomial degree of accuracy
+    nv::NV             # number of neighbors
     f::F               # basis function 
 end
 
