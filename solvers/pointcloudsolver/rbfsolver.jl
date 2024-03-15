@@ -117,7 +117,7 @@ end
 # """
 # @inline function each_quad_node_global(domain::PointCloudDomain,
 #                                        solver::PointCloudSolver, other_args...)
-#     Base.OneTo(solver.basis.Nq * domain.md.num_elements)
+#     Base.OneTo(solver.basis.Nq * domain.pd.num_elements)
 # end
 
 # """
@@ -129,7 +129,7 @@ end
 # """
 # @inline function each_face_node_global(domain::PointCloudDomain,
 #                                        solver::PointCloudSolver, other_args...)
-#     Base.OneTo(solver.basis.Nfq * domain.md.num_elements)
+#     Base.OneTo(solver.basis.Nfq * domain.pd.num_elements)
 # end
 
 # interface with semidiscretization_hyperbolic
@@ -164,7 +164,7 @@ end
 #                       solver::DGMultiWeakForm, RealT,
 #                       uEltype) where {NDIMS}
 #     rd = solver.basis
-#     md = domain.md
+#     pd = domain.pd
 
 #     # volume quadrature weights, volume interpolation matrix, mass matrix, differentiation matrices
 #     @unpack wq, Vq, M, Drst = rd
@@ -175,9 +175,9 @@ end
 #     nvars = nvariables(equations)
 
 #     # storage for volume quadrature values, face quadrature values, flux values
-#     u_values = allocate_nested_array(uEltype, nvars, size(md.xq), solver)
-#     u_face_values = allocate_nested_array(uEltype, nvars, size(md.xf), solver)
-#     flux_face_values = allocate_nested_array(uEltype, nvars, size(md.xf), solver)
+#     u_values = allocate_nested_array(uEltype, nvars, size(pd.xq), solver)
+#     u_face_values = allocate_nested_array(uEltype, nvars, size(pd.xf), solver)
+#     flux_face_values = allocate_nested_array(uEltype, nvars, size(pd.xf), solver)
 #     if typeof(rd.approximation_type) <:
 #        Union{SBP, AbstractNonperiodicDerivativeOperator}
 #         lift_scalings = rd.wf ./ rd.wq[rd.Fmask] # lift scalings for diag-norm SBP operators
@@ -191,10 +191,10 @@ end
 
 #     # For curved meshes, we interpolate geometric terms from nodal points to quadrature points.
 #     # For affine meshes, we just access one element of this interpolated data.
-#     dxidxhatj = map(x -> rd.Vq * x, md.rstxyzJ)
+#     dxidxhatj = map(x -> rd.Vq * x, pd.rstxyzJ)
 
 #     # interpolate J to quadrature points for weight-adjusted DG (WADG)
-#     invJ = inv.(rd.Vq * md.J)
+#     invJ = inv.(rd.Vq * pd.J)
 
 #     # for scaling by curved geometric terms (not used by affine PointCloudDomain)
 #     flux_threaded = [[allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
@@ -202,87 +202,87 @@ end
 #     rotated_flux_threaded = [allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
 #                              for _ in 1:Threads.nthreads()]
 
-#     return (; md, weak_differentiation_matrices, lift_scalings, invJ, dxidxhatj,
+#     return (; pd, weak_differentiation_matrices, lift_scalings, invJ, dxidxhatj,
 #             u_values, u_face_values, flux_face_values,
 #             local_values_threaded, flux_threaded, rotated_flux_threaded)
 # end
 
 # Constructs cache variables for PointCloudDomains
+# Needs heavy rework to be compatible with PointCloudSolver
+# Esp. since we need to generate operator matrices here
+# that depend on our governing equation
 function create_cache(domain::PointCloudDomain{NDIMS}, equations,
-                      solver::DGMultiWeakForm, RealT,
+                      solver::RBFSolver, RealT,
                       uEltype) where {NDIMS}
     rd = solver.basis
-    md = domain.md
+    pd = domain.pd
 
     # volume quadrature weights, volume interpolation matrix, mass matrix, differentiation matrices
     @unpack wq, Vq, M, Drst = rd
 
+    ### Replace with call to RBF-FD Engine for generating 
+    # differentiation matrices as required by the governing equation
+    # differentiation_matrices = compute_flux_operators(domain, solver, equations)
     # ∫f(u) * dv/dx_i = ∑_j (Vq*Drst[i])'*diagm(wq)*(rstxyzJ[i,j].*f(Vq*u))
-    weak_differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
+    # differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
 
     nvars = nvariables(equations)
 
     # storage for volume quadrature values, face quadrature values, flux values
-    u_values = allocate_nested_array(uEltype, nvars, size(md.xq), solver)
-    u_face_values = allocate_nested_array(uEltype, nvars, size(md.xf), solver)
-    flux_face_values = allocate_nested_array(uEltype, nvars, size(md.xf), solver)
-    if typeof(rd.approximation_type) <:
-       Union{SBP, AbstractNonperiodicDerivativeOperator}
-        lift_scalings = rd.wf ./ rd.wq[rd.Fmask] # lift scalings for diag-norm SBP operators
-    else
-        lift_scalings = nothing
-    end
+    # currently keeping all of these but may not need all of them
+    u_values = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
+    u_face_values = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
+    flux_face_values = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
 
     # local storage for volume integral and source computations
-    local_values_threaded = [allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
+    local_values_threaded = [allocate_nested_array(uEltype, nvars, (pd.num_points,),
+                                                   solver)
                              for _ in 1:Threads.nthreads()]
-
-    # For curved meshes, we interpolate geometric terms from nodal points to quadrature points.
-    # For affine meshes, we just access one element of this interpolated data.
-    dxidxhatj = map(x -> rd.Vq * x, md.rstxyzJ)
-
-    # interpolate J to quadrature points for weight-adjusted DG (WADG)
-    invJ = inv.(rd.Vq * md.J)
 
     # for scaling by curved geometric terms (not used by affine PointCloudDomain)
-    flux_threaded = [[allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
+    flux_threaded = [[allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
                       for _ in 1:NDIMS] for _ in 1:Threads.nthreads()]
-    rotated_flux_threaded = [allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
-                             for _ in 1:Threads.nthreads()]
+    rhs_local_threaded = [allocate_nested_array(uEltype, nvars,
+                                                (num_quad_points_total,), dg)
+                          for _ in 1:Threads.nthreads()]
 
-    return (; md, weak_differentiation_matrices, lift_scalings, invJ, dxidxhatj,
+    return (; pd, differentiation_matrices,
             u_values, u_face_values, flux_face_values,
-            local_values_threaded, flux_threaded, rotated_flux_threaded)
+            local_values_threaded, flux_threaded, rhs_local_threaded)
 end
 
+# used by semidiscretize(semi::AbstractSemidiscretization, tspan;
+# reset_threads = true)
+# May keep allocate_coefficients but make 
+# compute_coefficients a no-op
 function allocate_coefficients(domain::PointCloudDomain, equations,
                                solver::PointCloudSolver, cache)
-    return allocate_nested_array(real(solver), nvariables(equations), size(domain.md.x),
+    return allocate_nested_array(real(solver), nvariables(equations), (pd.num_points,),
                                  solver)
 end
 
 function compute_coefficients!(u, initial_condition, t,
                                domain::PointCloudDomain, equations,
                                solver::PointCloudSolver, cache)
-    md = domain.md
-    rd = solver.basis
-    @unpack u_values = cache
+    # pd = domain.pd
+    # rd = solver.basis
+    # @unpack u_values = cache
 
-    # evaluate the initial condition at quadrature points
-    @threaded for i in each_quad_node_global(domain, solver, cache)
-        u_values[i] = initial_condition(SVector(getindex.(md.xyzq, i)),
-                                        t, equations)
-    end
+    # # evaluate the initial condition at quadrature points
+    # @threaded for i in each_quad_node_global(domain, solver, cache)
+    #     u_values[i] = initial_condition(SVector(getindex.(pd.xyzq, i)),
+    #                                     t, equations)
+    # end
 
-    # multiplying by Pq computes the L2 projection
-    apply_to_each_field(mul_by!(rd.Pq), u, u_values)
+    # # multiplying by Pq computes the L2 projection
+    # apply_to_each_field(mul_by!(rd.Pq), u, u_values)
 end
 
 # estimates the timestep based on polynomial degree and domain. Does not account for physics (e.g.,
 # computes an estimate of `dt` based on the advection equation with constant unit advection speed).
 function estimate_dt(domain::PointCloudDomain, solver::PointCloudSolver)
     rd = solver.basis # RefPointData
-    return StartUpDG.estimate_h(rd, domain.md) / StartUpDG.inverse_trace_constant(rd)
+    return StartUpDG.estimate_h(rd, domain.pd) / StartUpDG.inverse_trace_constant(rd)
 end
 
 dt_polydeg_scaling(solver::PointCloudSolver) = inv(solver.basis.N + 1)
@@ -294,12 +294,12 @@ end
 function max_dt(u, t, domain::PointCloudDomain,
                 constant_speed::False, equations, solver::PointCloudSolver{NDIMS},
                 cache) where {NDIMS}
-    @unpack md = domain
+    @unpack pd = domain
     rd = solver.basis
 
     dt_min = Inf
     for e in eachelement(domain, solver, cache)
-        h_e = StartUpDG.estimate_h(e, rd, md)
+        h_e = StartUpDG.estimate_h(e, rd, pd)
         max_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
         for i in Base.OneTo(rd.Np) # loop over nodes
             lambda_i = max_abs_speeds(u[i, e], equations)
@@ -317,12 +317,12 @@ end
 function max_dt(u, t, domain::PointCloudDomain,
                 constant_speed::True, equations, solver::PointCloudSolver{NDIMS},
                 cache) where {NDIMS}
-    @unpack md = domain
+    @unpack pd = domain
     rd = solver.basis
 
     dt_min = Inf
     for e in eachelement(domain, solver, cache)
-        h_e = StartUpDG.estimate_h(e, rd, md)
+        h_e = StartUpDG.estimate_h(e, rd, pd)
         max_speeds = ntuple(_ -> nextfloat(zero(t)), NDIMS)
         for i in Base.OneTo(rd.Np) # loop over nodes
             max_speeds = max.(max_abs_speeds(equations), max_speeds)
@@ -352,9 +352,9 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
                       solver::PointCloudSolver,
                       cache)
     rd = solver.basis
-    md = domain.md
+    pd = domain.pd
     @unpack weak_differentiation_matrices, dxidxhatj, u_values, local_values_threaded = cache
-    @unpack rstxyzJ = md # geometric terms
+    @unpack rstxyzJ = pd # geometric terms
 
     # interpolate to quadrature points
     apply_to_each_field(mul_by!(rd.Vq), u_values, u)
@@ -429,8 +429,8 @@ function calc_interface_flux!(cache, surface_integral::SurfaceIntegralWeakForm,
                               have_nonconservative_terms::False, equations,
                               solver::PointCloudSolver{NDIMS}) where {NDIMS}
     @unpack surface_flux = surface_integral
-    md = domain.md
-    @unpack mapM, mapP, nxyzJ, Jf = md
+    pd = domain.pd
+    @unpack mapM, mapP, nxyzJ, Jf = pd
     @unpack u_face_values, flux_face_values = cache
 
     @threaded for face_node_index in each_face_node_global(domain, solver, cache)
@@ -449,8 +449,8 @@ function calc_interface_flux!(cache, surface_integral::SurfaceIntegralWeakForm,
                               have_nonconservative_terms::True, equations,
                               solver::PointCloudSolver{NDIMS}) where {NDIMS}
     flux_conservative, flux_nonconservative = surface_integral.surface_flux
-    md = domain.md
-    @unpack mapM, mapP, nxyzJ, Jf = md
+    pd = domain.pd
+    @unpack mapM, mapP, nxyzJ, Jf = pd
     @unpack u_face_values, flux_face_values = cache
 
     @threaded for face_node_index in each_face_node_global(domain, solver, cache)
@@ -543,16 +543,16 @@ function calc_single_boundary_flux!(cache, t, boundary_condition, boundary_key, 
                                     have_nonconservative_terms::False, equations,
                                     solver::PointCloudSolver{NDIMS}) where {NDIMS}
     rd = solver.basis
-    md = domain.md
+    pd = domain.pd
     @unpack u_face_values, flux_face_values = cache
-    @unpack xyzf, nxyzJ, Jf = md
+    @unpack xyzf, nxyzJ, Jf = pd
     @unpack surface_flux = solver.surface_integral
 
     # reshape face/normal arrays to have size = (num_points_on_face, num_faces_total).
     # domain.boundary_faces indexes into the columns of these face-reshaped arrays.
     num_faces = StartUpDG.num_faces(rd.element_type)
     num_pts_per_face = rd.Nfq ÷ num_faces
-    num_faces_total = num_faces * md.num_elements
+    num_faces_total = num_faces * pd.num_elements
 
     # This function was originally defined as
     # `reshape_by_face(u) = reshape(view(u, :), num_pts_per_face, num_faces_total)`.
@@ -587,13 +587,13 @@ function calc_single_boundary_flux!(cache, t, boundary_condition, boundary_key, 
                                     have_nonconservative_terms::True, equations,
                                     solver::PointCloudSolver{NDIMS}) where {NDIMS}
     rd = solver.basis
-    md = domain.md
+    pd = domain.pd
     surface_flux, nonconservative_flux = solver.surface_integral.surface_flux
 
     # reshape face/normal arrays to have size = (num_points_on_face, num_faces_total).
     # domain.boundary_faces indexes into the columns of these face-reshaped arrays.
     num_pts_per_face = rd.Nfq ÷ StartUpDG.num_faces(rd.element_type)
-    num_faces_total = StartUpDG.num_faces(rd.element_type) * md.num_elements
+    num_faces_total = StartUpDG.num_faces(rd.element_type) * pd.num_elements
 
     # This function was originally defined as
     # `reshape_by_face(u) = reshape(view(u, :), num_pts_per_face, num_faces_total)`.
@@ -604,8 +604,8 @@ function calc_single_boundary_flux!(cache, t, boundary_condition, boundary_key, 
 
     u_face_values = reshape_by_face(cache.u_face_values)
     flux_face_values = reshape_by_face(cache.flux_face_values)
-    Jf = reshape_by_face(md.Jf)
-    nxyzJ, xyzf = reshape_by_face.(md.nxyzJ), reshape_by_face.(md.xyzf) # broadcast over nxyzJ::NTuple{NDIMS,Matrix}
+    Jf = reshape_by_face(pd.Jf)
+    nxyzJ, xyzf = reshape_by_face.(pd.nxyzJ), reshape_by_face.(pd.xyzf) # broadcast over nxyzJ::NTuple{NDIMS,Matrix}
 
     # loop through boundary faces, which correspond to columns of reshaped u_face_values, ...
     for f in domain.boundary_faces[boundary_key]
@@ -687,7 +687,7 @@ end
 function calc_sources!(du, u, t, source_terms,
                        domain, equations, solver::PointCloudSolver, cache)
     rd = solver.basis
-    md = domain.md
+    pd = domain.pd
     @unpack Pq = rd
     @unpack u_values, local_values_threaded = cache
     @threaded for e in eachelement(domain, solver, cache)
@@ -696,7 +696,7 @@ function calc_sources!(du, u, t, source_terms,
         u_e = view(u_values, :, e) # u_values should already be computed from volume integral
 
         for i in each_quad_node(domain, solver, cache)
-            source_values[i] = source_terms(u_e[i], SVector(getindex.(md.xyzq, i, e)),
+            source_values[i] = source_terms(u_e[i], SVector(getindex.(pd.xyzq, i, e)),
                                             t, equations)
         end
         apply_to_each_field(mul_by_accum!(Pq), view(du, :, e), source_values)
