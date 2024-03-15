@@ -13,4 +13,7 @@ basis = RefPointData(Point1D(), RBF(), 5)
 basis = RefPointData(Point1D(), RBF(PolyharmonicSpline(5)), 3)
 rbf = RBFSolver(basis, RBFFDEngine())
 
-PointCloudBasis(Point1D(), 3; approximation_type = RBF(PolyharmonicSpline(5)))
+basis = PointCloudBasis(Point1D(), 3; approximation_type = RBF(PolyharmonicSpline(5)))
+rbf = RBFSolver(basis, RBFFDEngine())
+
+domain = PointCloudDomain(rbf, cells_per_dimension; is_on_boundary)

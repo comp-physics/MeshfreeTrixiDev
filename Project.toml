@@ -1,5 +1,6 @@
 [deps]
 ConstructionBase = "187b0558-2788-49d3-abe0-74a17ed4e7c9"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 MeshfreeTrixi = "fd449e90-7bb5-416e-be12-8a17b6c6ab2b"
 MuladdMacro = "46d2c3a1-f734-5fdb-9937-b9b9aeba4221"
