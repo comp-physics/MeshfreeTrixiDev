@@ -10,13 +10,16 @@ function read_medusa_file(casename)
     ## Create vector of vector of ints for each boundary type
     num_bound = -1 * minimum(types)
     boundary_idxs = Vector{Vector{Int64}}(undef, num_bound)
+    boundary_normals = Vector{Vector{SVector{2, Float64}}}(undef, num_bound)
     for i in 1:num_bound
         boundary_idxs[i] = Int64[]
+        boundary_normals[i] = SVector{2, Float64}[]
     end
-    for eachval in boundary_idx
+    for j in eachindex(boundary_idx)
         for i in 1:num_bound
-            if types[eachval] == -i
-                push!(boundary_idxs[i], eachval)
+            if types[boundary_idx[j]] == -i
+                push!(boundary_idxs[i], boundary_idx[j])
+                push!(boundary_normals[i], SVector{2, Float64}(normals[j, :]))
             end
         end
     end
@@ -54,7 +57,7 @@ function read_medusa_file(casename)
 
     # positions, interior_idx, boundary_idxs, normals, boundary_ranges, types = import_medusa(casename)
     ### Partition local normals 
-    boundary_normals = [normal_out[boundary_ranges[i]] for i in eachindex(boundary_ranges)]
+    # boundary_normals = [normal_out[boundary_ranges[i]] for i in eachindex(boundary_ranges)]
 
     return position_out, interior_idx, boundary_idxs, boundary_normals, normal_out,
            boundary_ranges, types

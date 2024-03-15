@@ -36,15 +36,16 @@ scatter(Tuple.(domain.pd.points), color = :black, markersize = 10.0, marker = :c
 # end
 
 # Extract boundary points and normals
-boundary = domain.pd.points[domain.boundary_tags[:cyl].idx]
-normals = domain.boundary_tags[:cyl].normals
+key = :cyl
+boundary = domain.pd.points[domain.boundary_tags[key].idx]
+normals = domain.boundary_tags[key].normals
 # Decompose boundary points and normals into their components
 boundary_x = getindex.(boundary, 1)
 boundary_y = getindex.(boundary, 2)
 normals_dx = getindex.(normals, 1)
 normals_dy = getindex.(normals, 2)
 # Plot the boundary points
-scatter!(boundary_x, boundary_y, color = :black, markersize = 4)
+scatter!(boundary_x, boundary_y, markersize = 10.0)
 # Add the quiver plot for normals
-quiver!(boundary_x, boundary_y, normals_dx, normals_dy, color = :blue, lengthscale = 0.05)
+quiver!(boundary_x, boundary_y, normals_dx, normals_dy, lengthscale = 0.05)
 # Display the figure
