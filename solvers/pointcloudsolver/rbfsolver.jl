@@ -52,8 +52,8 @@ In particular, not the dimensions themselves are returned.
 @inline eachdim(domain) = Base.OneTo(ndims(domain))
 
 # iteration over all elements in a domain
-@inline function ndofs(domain::PointCloudDomain, solver::PointCloudSolver,
-                       other_args...)
+@inline function Trixi.ndofs(domain::PointCloudDomain, solver::PointCloudSolver,
+                             other_args...)
     domain.pd.num_points
 end
 """
@@ -133,8 +133,8 @@ end
 # end
 
 # interface with semidiscretization_hyperbolic
-wrap_array(u_ode, domain::PointCloudDomain, equations, solver::PointCloudSolver, cache) = u_ode
-wrap_array_native(u_ode, domain::PointCloudDomain, equations, solver::PointCloudSolver, cache) = u_ode
+Trixi.wrap_array(u_ode, domain::PointCloudDomain, equations, solver::PointCloudSolver, cache) = u_ode
+Trixi.wrap_array_native(u_ode, domain::PointCloudDomain, equations, solver::PointCloudSolver, cache) = u_ode
 function digest_boundary_conditions(boundary_conditions::NamedTuple{Keys, ValueTypes},
                                     domain::PointCloudDomain,
                                     solver::PointCloudSolver,
@@ -211,18 +211,19 @@ end
 # Needs heavy rework to be compatible with PointCloudSolver
 # Esp. since we need to generate operator matrices here
 # that depend on our governing equation
-function create_cache(domain::PointCloudDomain{NDIMS}, equations,
-                      solver::RBFSolver, RealT,
-                      uEltype) where {NDIMS}
+function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
+                            solver::RBFSolver, RealT,
+                            uEltype) where {NDIMS}
     rd = solver.basis
     pd = domain.pd
 
     # volume quadrature weights, volume interpolation matrix, mass matrix, differentiation matrices
-    @unpack wq, Vq, M, Drst = rd
+    # @unpack wq, Vq, M, Drst = rd
 
     ### Replace with call to RBF-FD Engine for generating 
     # differentiation matrices as required by the governing equation
     # differentiation_matrices = compute_flux_operators(domain, solver, equations)
+    differentiation_matrices = nothing
     # ∫f(u) * dv/dx_i = ∑_j (Vq*Drst[i])'*diagm(wq)*(rstxyzJ[i,j].*f(Vq*u))
     # differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
 
@@ -243,7 +244,7 @@ function create_cache(domain::PointCloudDomain{NDIMS}, equations,
     flux_threaded = [[allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
                       for _ in 1:NDIMS] for _ in 1:Threads.nthreads()]
     rhs_local_threaded = [allocate_nested_array(uEltype, nvars,
-                                                (num_quad_points_total,), dg)
+                                                (pd.num_points,), solver)
                           for _ in 1:Threads.nthreads()]
 
     return (; pd, differentiation_matrices,
@@ -255,15 +256,15 @@ end
 # reset_threads = true)
 # May keep allocate_coefficients but make 
 # compute_coefficients a no-op
-function allocate_coefficients(domain::PointCloudDomain, equations,
-                               solver::PointCloudSolver, cache)
+function Trixi.allocate_coefficients(domain::PointCloudDomain, equations,
+                                     solver::PointCloudSolver, cache)
     return allocate_nested_array(real(solver), nvariables(equations), (pd.num_points,),
                                  solver)
 end
 
-function compute_coefficients!(u, initial_condition, t,
-                               domain::PointCloudDomain, equations,
-                               solver::PointCloudSolver, cache)
+function Trixi.compute_coefficients!(u, initial_condition, t,
+                                     domain::PointCloudDomain, equations,
+                                     solver::PointCloudSolver, cache)
     # pd = domain.pd
     # rd = solver.basis
     # @unpack u_values = cache
@@ -345,84 +346,38 @@ end
 #     apply_to_each_field(mul_by!(rd.Vf), u_face_values, u)
 # end
 
-# version for affine meshes
-function calc_fluxes!(du, u, domain::PointCloudDomain,
-                      have_nonconservative_terms::False, equations,
-                      engine::RBFFDEngine,
-                      solver::PointCloudSolver,
-                      cache)
-    rd = solver.basis
-    pd = domain.pd
-    @unpack weak_differentiation_matrices, dxidxhatj, u_values, local_values_threaded = cache
-    @unpack rstxyzJ = pd # geometric terms
+### Reimplement this to use our RBF-FD engine
+# # version for affine meshes
+# function calc_fluxes!(du, u, domain::PointCloudDomain,
+#                       have_nonconservative_terms::False, equations,
+#                       engine::RBFFDEngine,
+#                       solver::PointCloudSolver,
+#                       cache)
+#     rd = solver.basis
+#     pd = domain.pd
+#     @unpack weak_differentiation_matrices, dxidxhatj, u_values, local_values_threaded = cache
+#     @unpack rstxyzJ = pd # geometric terms
 
-    # interpolate to quadrature points
-    apply_to_each_field(mul_by!(rd.Vq), u_values, u)
+#     # interpolate to quadrature points
+#     apply_to_each_field(mul_by!(rd.Vq), u_values, u)
 
-    @threaded for e in eachelement(domain, solver, cache)
-        flux_values = local_values_threaded[Threads.threadid()]
-        for i in eachdim(domain)
-            # Here, the broadcasting operation does allocate
-            #flux_values .= flux.(view(u_values, :, e), i, equations)
-            # Use loop instead
-            for j in eachindex(flux_values)
-                flux_values[j] = flux(u_values[j, e], i, equations)
-            end
-            for j in eachdim(domain)
-                apply_to_each_field(mul_by_accum!(weak_differentiation_matrices[j],
-                                                  dxidxhatj[i, j][1, e]),
-                                    view(du, :, e), flux_values)
-            end
-        end
-    end
-end
-
-# version for curved meshes
-function calc_fluxes!(du, u, domain::PointCloudDomain{NDIMS, <:NonAffine},
-                      have_nonconservative_terms::False, equations,
-                      engine::RBFFDEngine,
-                      solver::PointCloudSolver,
-                      cache) where {NDIMS}
-    rd = solver.basis
-    (; weak_differentiation_matrices, u_values) = cache
-    (; dxidxhatj) = cache
-
-    # interpolate to quadrature points
-    apply_to_each_field(mul_by!(rd.Vq), u_values, u)
-
-    @threaded for e in eachelement(domain, solver, cache)
-        flux_values = cache.flux_threaded[Threads.threadid()]
-        for i in eachdim(domain)
-            # Here, the broadcasting operation does not allocate
-            flux_values[i] .= flux.(view(u_values, :, e), i, equations)
-        end
-
-        # rotate flux with df_i/dx_i = sum_j d(x_i)/d(x̂_j) * d(f_i)/d(x̂_j).
-        # Example: df_x/dx + df_y/dy = dr/dx * df_x/dr + ds/dx * df_x/ds
-        #                  + dr/dy * df_y/dr + ds/dy * df_y/ds
-        #                  = Dr * (dr/dx * fx + dr/dy * fy) + Ds * (...)
-        #                  = Dr * (f_r) + Ds * (f_s)
-
-        rotated_flux_values = cache.rotated_flux_threaded[Threads.threadid()]
-        for j in eachdim(domain)
-            fill!(rotated_flux_values, zero(eltype(rotated_flux_values)))
-
-            # compute rotated fluxes
-            for i in eachdim(domain)
-                for ii in eachindex(rotated_flux_values)
-                    flux_i_node = flux_values[i][ii]
-                    dxidxhatj_node = dxidxhatj[i, j][ii, e]
-                    rotated_flux_values[ii] = rotated_flux_values[ii] +
-                                              dxidxhatj_node * flux_i_node
-                end
-            end
-
-            # apply weak differentiation matrices to rotated fluxes
-            apply_to_each_field(mul_by_accum!(weak_differentiation_matrices[j]),
-                                view(du, :, e), rotated_flux_values)
-        end
-    end
-end
+#     @threaded for e in eachelement(domain, solver, cache)
+#         flux_values = local_values_threaded[Threads.threadid()]
+#         for i in eachdim(domain)
+#             # Here, the broadcasting operation does allocate
+#             #flux_values .= flux.(view(u_values, :, e), i, equations)
+#             # Use loop instead
+#             for j in eachindex(flux_values)
+#                 flux_values[j] = flux(u_values[j, e], i, equations)
+#             end
+#             for j in eachdim(domain)
+#                 apply_to_each_field(mul_by_accum!(weak_differentiation_matrices[j],
+#                                                   dxidxhatj[i, j][1, e]),
+#                                     view(du, :, e), flux_values)
+#             end
+#         end
+#     end
+# end
 
 function calc_interface_flux!(cache, surface_integral::SurfaceIntegralWeakForm,
                               domain::PointCloudDomain,
