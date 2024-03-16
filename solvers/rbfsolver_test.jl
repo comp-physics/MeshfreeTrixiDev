@@ -50,3 +50,5 @@ boundary_conditions = (; :inlet => BoundaryConditionDirichlet(initial_condition)
 semi = SemidiscretizationHyperbolic(domain, equations,
                                     initial_condition, rbf;
                                     boundary_conditions = boundary_conditions)
+tspan = (0.0, 0.4)
+ode = semidiscretize(semi, tspan)

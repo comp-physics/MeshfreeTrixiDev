@@ -258,7 +258,8 @@ end
 # compute_coefficients a no-op
 function Trixi.allocate_coefficients(domain::PointCloudDomain, equations,
                                      solver::PointCloudSolver, cache)
-    return allocate_nested_array(real(solver), nvariables(equations), (pd.num_points,),
+    return allocate_nested_array(real(solver), nvariables(equations),
+                                 (domain.pd.num_points,),
                                  solver)
 end
 
