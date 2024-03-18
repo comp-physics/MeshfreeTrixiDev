@@ -170,7 +170,7 @@ end
 #     @unpack wq, Vq, M, Drst = rd
 
 #     # ∫f(u) * dv/dx_i = ∑_j (Vq*Drst[i])'*diagm(wq)*(rstxyzJ[i,j].*f(Vq*u))
-#     weak_differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
+#     rbf_differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
 
 #     nvars = nvariables(equations)
 
@@ -202,7 +202,7 @@ end
 #     rotated_flux_threaded = [allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
 #                              for _ in 1:Threads.nthreads()]
 
-#     return (; pd, weak_differentiation_matrices, lift_scalings, invJ, dxidxhatj,
+#     return (; pd, rbf_differentiation_matrices, lift_scalings, invJ, dxidxhatj,
 #             u_values, u_face_values, flux_face_values,
 #             local_values_threaded, flux_threaded, rotated_flux_threaded)
 # end
@@ -222,10 +222,12 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
 
     ### Replace with call to RBF-FD Engine for generating 
     # differentiation matrices as required by the governing equation
-    # differentiation_matrices = compute_flux_operators(domain, solver, equations)
-    differentiation_matrices = nothing
+    # rbf_differentiation_matrices = compute_flux_operators(domain, solver, equations)
+    # This will compute diff_mat with two entries, the first being the dx,
+    # and the second being dy. 
+    rbf_differentiation_matrices = nothing
     # ∫f(u) * dv/dx_i = ∑_j (Vq*Drst[i])'*diagm(wq)*(rstxyzJ[i,j].*f(Vq*u))
-    # differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
+    # rbf_differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
 
     nvars = nvariables(equations)
 
@@ -247,7 +249,7 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
                                                 (pd.num_points,), solver)
                           for _ in 1:Threads.nthreads()]
 
-    return (; pd, differentiation_matrices,
+    return (; pd, rbf_differentiation_matrices,
             u_values, u_face_values, flux_face_values,
             local_values_threaded, flux_threaded, rhs_local_threaded)
 end
@@ -279,7 +281,7 @@ function Trixi.compute_coefficients!(u, initial_condition, t,
     end
 
     # multiplying by Pq computes the L2 projection
-    # Not doing project for point cloud solver
+    # Not doing projection for point cloud solver
     apply_to_each_field(mul_by!(I), u, u_values)
 end
 
@@ -359,86 +361,100 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
                       cache)
     rd = solver.basis
     pd = domain.pd
-    @unpack weak_differentiation_matrices, dxidxhatj, u_values, local_values_threaded = cache
-    @unpack rstxyzJ = pd # geometric terms
+    @unpack rbf_differentiation_matrices, u_values, local_values_threaded = cache
+    # @unpack rstxyzJ = pd # geometric terms
 
-    # interpolate to quadrature points
-    apply_to_each_field(mul_by!(rd.Vq), u_values, u)
-
-    @threaded for e in eachelement(domain, solver, cache)
-        flux_values = local_values_threaded[Threads.threadid()]
-        for i in eachdim(domain)
-            # Here, the broadcasting operation does allocate
-            #flux_values .= flux.(view(u_values, :, e), i, equations)
-            # Use loop instead
-            for j in eachindex(flux_values)
-                flux_values[j] = flux(u_values[j, e], i, equations)
-            end
+    # Our elements correspond to each point
+    # but points do not have subelements 
+    # as such eachindex(flux_values) is the same 
+    # as e in eachelement(domain, solver, cache)
+    # Also need to determine if we should use
+    # u directly or u_values
+    flux_values = local_values_threaded[1]
+    for i in eachdim(domain)
+        for e in eachelement(domain, solver, cache)
+            flux_values[e] = flux(u_values[e], i, equations)
             for j in eachdim(domain)
-                apply_to_each_field(mul_by_accum!(weak_differentiation_matrices[j],
-                                                  dxidxhatj[i, j][1, e]),
-                                    view(du, :, e), flux_values)
+                apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j],
+                                                  1),
+                                    du, flux_values)
             end
         end
     end
+    # @threaded for e in eachelement(domain, solver, cache)
+    #     flux_values = local_values_threaded[Threads.threadid()]
+    #     for i in eachdim(domain)
+    #         # Here, the broadcasting operation does allocate
+    #         #flux_values .= flux.(view(u_values, :, e), i, equations)
+    #         # Use loop instead
+    #         for j in eachindex(flux_values)
+    #             flux_values[j] = flux(u_values[j, e], i, equations)
+    #         end
+    #         for j in eachdim(domain)
+    #             apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j],
+    #                                               dxidxhatj[i, j][1, e]),
+    #                                 view(du, :, e), flux_values)
+    #         end
+    #     end
+    # end
 end
 
-function calc_interface_flux!(cache, surface_integral::SurfaceIntegralWeakForm,
-                              domain::PointCloudDomain,
-                              have_nonconservative_terms::False, equations,
-                              solver::PointCloudSolver{NDIMS}) where {NDIMS}
-    @unpack surface_flux = surface_integral
-    pd = domain.pd
-    @unpack mapM, mapP, nxyzJ, Jf = pd
-    @unpack u_face_values, flux_face_values = cache
+# function calc_interface_flux!(cache, surface_integral::SurfaceIntegralWeakForm,
+#                               domain::PointCloudDomain,
+#                               have_nonconservative_terms::False, equations,
+#                               solver::PointCloudSolver{NDIMS}) where {NDIMS}
+#     @unpack surface_flux = surface_integral
+#     pd = domain.pd
+#     @unpack mapM, mapP, nxyzJ, Jf = pd
+#     @unpack u_face_values, flux_face_values = cache
 
-    @threaded for face_node_index in each_face_node_global(domain, solver, cache)
+#     @threaded for face_node_index in each_face_node_global(domain, solver, cache)
 
-        # inner (idM -> minus) and outer (idP -> plus) indices
-        idM, idP = mapM[face_node_index], mapP[face_node_index]
-        uM = u_face_values[idM]
-        uP = u_face_values[idP]
-        normal = SVector{NDIMS}(getindex.(nxyzJ, idM)) / Jf[idM]
-        flux_face_values[idM] = surface_flux(uM, uP, normal, equations) * Jf[idM]
-    end
-end
+#         # inner (idM -> minus) and outer (idP -> plus) indices
+#         idM, idP = mapM[face_node_index], mapP[face_node_index]
+#         uM = u_face_values[idM]
+#         uP = u_face_values[idP]
+#         normal = SVector{NDIMS}(getindex.(nxyzJ, idM)) / Jf[idM]
+#         flux_face_values[idM] = surface_flux(uM, uP, normal, equations) * Jf[idM]
+#     end
+# end
 
-function calc_interface_flux!(cache, surface_integral::SurfaceIntegralWeakForm,
-                              domain::PointCloudDomain,
-                              have_nonconservative_terms::True, equations,
-                              solver::PointCloudSolver{NDIMS}) where {NDIMS}
-    flux_conservative, flux_nonconservative = surface_integral.surface_flux
-    pd = domain.pd
-    @unpack mapM, mapP, nxyzJ, Jf = pd
-    @unpack u_face_values, flux_face_values = cache
+# function calc_interface_flux!(cache, surface_integral::SurfaceIntegralWeakForm,
+#                               domain::PointCloudDomain,
+#                               have_nonconservative_terms::True, equations,
+#                               solver::PointCloudSolver{NDIMS}) where {NDIMS}
+#     flux_conservative, flux_nonconservative = surface_integral.surface_flux
+#     pd = domain.pd
+#     @unpack mapM, mapP, nxyzJ, Jf = pd
+#     @unpack u_face_values, flux_face_values = cache
 
-    @threaded for face_node_index in each_face_node_global(domain, solver, cache)
+#     @threaded for face_node_index in each_face_node_global(domain, solver, cache)
 
-        # inner (idM -> minus) and outer (idP -> plus) indices
-        idM, idP = mapM[face_node_index], mapP[face_node_index]
-        uM = u_face_values[idM]
+#         # inner (idM -> minus) and outer (idP -> plus) indices
+#         idM, idP = mapM[face_node_index], mapP[face_node_index]
+#         uM = u_face_values[idM]
 
-        # compute flux if node is not a boundary node
-        if idM != idP
-            uP = u_face_values[idP]
-            normal = SVector{NDIMS}(getindex.(nxyzJ, idM)) / Jf[idM]
-            conservative_part = flux_conservative(uM, uP, normal, equations)
+#         # compute flux if node is not a boundary node
+#         if idM != idP
+#             uP = u_face_values[idP]
+#             normal = SVector{NDIMS}(getindex.(nxyzJ, idM)) / Jf[idM]
+#             conservative_part = flux_conservative(uM, uP, normal, equations)
 
-            # Two notes on the use of `flux_nonconservative`:
-            # 1. In contrast to other domain types, only one nonconservative part needs to be
-            #    computed since we loop over the elements, not the unique interfaces.
-            # 2. In general, nonconservative fluxes can depend on both the contravariant
-            #    vectors (normal direction) at the current node and the averaged ones. However,
-            #    both are the same at watertight interfaces, so we pass `normal` twice.
-            nonconservative_part = flux_nonconservative(uM, uP, normal, normal,
-                                                        equations)
-            # The factor 0.5 is necessary for the nonconservative fluxes based on the
-            # interpretation of global SBP operators.
-            flux_face_values[idM] = (conservative_part + 0.5 * nonconservative_part) *
-                                    Jf[idM]
-        end
-    end
-end
+#             # Two notes on the use of `flux_nonconservative`:
+#             # 1. In contrast to other domain types, only one nonconservative part needs to be
+#             #    computed since we loop over the elements, not the unique interfaces.
+#             # 2. In general, nonconservative fluxes can depend on both the contravariant
+#             #    vectors (normal direction) at the current node and the averaged ones. However,
+#             #    both are the same at watertight interfaces, so we pass `normal` twice.
+#             nonconservative_part = flux_nonconservative(uM, uP, normal, normal,
+#                                                         equations)
+#             # The factor 0.5 is necessary for the nonconservative fluxes based on the
+#             # interpretation of global SBP operators.
+#             flux_face_values[idM] = (conservative_part + 0.5 * nonconservative_part) *
+#                                     Jf[idM]
+#         end
+#     end
+# end
 
 # # assumes cache.flux_face_values is computed and filled with
 # # for polyomial discretizations, use dense LIFT matrix for surface contributions.
