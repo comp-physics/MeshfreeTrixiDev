@@ -159,54 +159,6 @@ function reset_du!(du, solver::PointCloudSolver, other_args...)
     return du
 end
 
-# # Constructs cache variables for both affine and non-affine (curved) DGMultiMeshes
-# function create_cache(domain::PointCloudDomain{NDIMS}, equations,
-#                       solver::DGMultiWeakForm, RealT,
-#                       uEltype) where {NDIMS}
-#     rd = solver.basis
-#     pd = domain.pd
-
-#     # volume quadrature weights, volume interpolation matrix, mass matrix, differentiation matrices
-#     @unpack wq, Vq, M, Drst = rd
-
-#     # ∫f(u) * dv/dx_i = ∑_j (Vq*Drst[i])'*diagm(wq)*(rstxyzJ[i,j].*f(Vq*u))
-#     rbf_differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
-
-#     nvars = nvariables(equations)
-
-#     # storage for volume quadrature values, face quadrature values, flux values
-#     u_values = allocate_nested_array(uEltype, nvars, size(pd.xq), solver)
-#     u_face_values = allocate_nested_array(uEltype, nvars, size(pd.xf), solver)
-#     flux_face_values = allocate_nested_array(uEltype, nvars, size(pd.xf), solver)
-#     if typeof(rd.approximation_type) <:
-#        Union{SBP, AbstractNonperiodicDerivativeOperator}
-#         lift_scalings = rd.wf ./ rd.wq[rd.Fmask] # lift scalings for diag-norm SBP operators
-#     else
-#         lift_scalings = nothing
-#     end
-
-#     # local storage for volume integral and source computations
-#     local_values_threaded = [allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
-#                              for _ in 1:Threads.nthreads()]
-
-#     # For curved meshes, we interpolate geometric terms from nodal points to quadrature points.
-#     # For affine meshes, we just access one element of this interpolated data.
-#     dxidxhatj = map(x -> rd.Vq * x, pd.rstxyzJ)
-
-#     # interpolate J to quadrature points for weight-adjusted DG (WADG)
-#     invJ = inv.(rd.Vq * pd.J)
-
-#     # for scaling by curved geometric terms (not used by affine PointCloudDomain)
-#     flux_threaded = [[allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
-#                       for _ in 1:NDIMS] for _ in 1:Threads.nthreads()]
-#     rotated_flux_threaded = [allocate_nested_array(uEltype, nvars, (rd.Nq,), solver)
-#                              for _ in 1:Threads.nthreads()]
-
-#     return (; pd, rbf_differentiation_matrices, lift_scalings, invJ, dxidxhatj,
-#             u_values, u_face_values, flux_face_values,
-#             local_values_threaded, flux_threaded, rotated_flux_threaded)
-# end
-
 # Constructs cache variables for PointCloudDomains
 # Needs heavy rework to be compatible with PointCloudSolver
 # Esp. since we need to generate operator matrices here
@@ -343,15 +295,6 @@ function max_dt(u, t, domain::PointCloudDomain,
     return 2 * dt_min * dt_polydeg_scaling(solver)
 end
 
-# # interpolates from solution coefficients to face quadrature points
-# # We pass the `surface_integral` argument solely for dispatch
-# function prolong2interfaces!(cache, u, domain::PointCloudDomain, equations,
-#                              surface_integral, solver::PointCloudSolver)
-#     rd = solver.basis
-#     @unpack u_face_values = cache
-#     apply_to_each_field(mul_by!(rd.Vf), u_face_values, u)
-# end
-
 ### Reimplement this to use our RBF-FD engine
 # # version for affine meshes
 function calc_fluxes!(du, u, domain::PointCloudDomain,
@@ -398,103 +341,6 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
     #     end
     # end
 end
-
-# function calc_interface_flux!(cache, surface_integral::SurfaceIntegralWeakForm,
-#                               domain::PointCloudDomain,
-#                               have_nonconservative_terms::False, equations,
-#                               solver::PointCloudSolver{NDIMS}) where {NDIMS}
-#     @unpack surface_flux = surface_integral
-#     pd = domain.pd
-#     @unpack mapM, mapP, nxyzJ, Jf = pd
-#     @unpack u_face_values, flux_face_values = cache
-
-#     @threaded for face_node_index in each_face_node_global(domain, solver, cache)
-
-#         # inner (idM -> minus) and outer (idP -> plus) indices
-#         idM, idP = mapM[face_node_index], mapP[face_node_index]
-#         uM = u_face_values[idM]
-#         uP = u_face_values[idP]
-#         normal = SVector{NDIMS}(getindex.(nxyzJ, idM)) / Jf[idM]
-#         flux_face_values[idM] = surface_flux(uM, uP, normal, equations) * Jf[idM]
-#     end
-# end
-
-# function calc_interface_flux!(cache, surface_integral::SurfaceIntegralWeakForm,
-#                               domain::PointCloudDomain,
-#                               have_nonconservative_terms::True, equations,
-#                               solver::PointCloudSolver{NDIMS}) where {NDIMS}
-#     flux_conservative, flux_nonconservative = surface_integral.surface_flux
-#     pd = domain.pd
-#     @unpack mapM, mapP, nxyzJ, Jf = pd
-#     @unpack u_face_values, flux_face_values = cache
-
-#     @threaded for face_node_index in each_face_node_global(domain, solver, cache)
-
-#         # inner (idM -> minus) and outer (idP -> plus) indices
-#         idM, idP = mapM[face_node_index], mapP[face_node_index]
-#         uM = u_face_values[idM]
-
-#         # compute flux if node is not a boundary node
-#         if idM != idP
-#             uP = u_face_values[idP]
-#             normal = SVector{NDIMS}(getindex.(nxyzJ, idM)) / Jf[idM]
-#             conservative_part = flux_conservative(uM, uP, normal, equations)
-
-#             # Two notes on the use of `flux_nonconservative`:
-#             # 1. In contrast to other domain types, only one nonconservative part needs to be
-#             #    computed since we loop over the elements, not the unique interfaces.
-#             # 2. In general, nonconservative fluxes can depend on both the contravariant
-#             #    vectors (normal direction) at the current node and the averaged ones. However,
-#             #    both are the same at watertight interfaces, so we pass `normal` twice.
-#             nonconservative_part = flux_nonconservative(uM, uP, normal, normal,
-#                                                         equations)
-#             # The factor 0.5 is necessary for the nonconservative fluxes based on the
-#             # interpretation of global SBP operators.
-#             flux_face_values[idM] = (conservative_part + 0.5 * nonconservative_part) *
-#                                     Jf[idM]
-#         end
-#     end
-# end
-
-# # assumes cache.flux_face_values is computed and filled with
-# # for polyomial discretizations, use dense LIFT matrix for surface contributions.
-# function calc_surface_integral!(du, u, domain::PointCloudDomain, equations,
-#                                 surface_integral::SurfaceIntegralWeakForm,
-#                                 solver::PointCloudSolver, cache)
-#     rd = solver.basis
-#     apply_to_each_field(mul_by_accum!(rd.LIFT), du, cache.flux_face_values)
-# end
-
-# # Specialize for nodal SBP discretizations. Uses that Vf*u = u[Fmask,:]
-# # We pass the `surface_integral` argument solely for dispatch
-# function prolong2interfaces!(cache, u, domain::PointCloudDomain, equations,
-#                              surface_integral,
-#                              solver::DGMultiSBP)
-#     rd = solver.basis
-#     @unpack Fmask = rd
-#     @unpack u_face_values = cache
-#     @threaded for e in eachelement(domain, solver, cache)
-#         for (i, fid) in enumerate(Fmask)
-#             u_face_values[i, e] = u[fid, e]
-#         end
-#     end
-# end
-
-# # Specialize for nodal SBP discretizations. Uses that du = LIFT*u is equivalent to
-# # du[Fmask,:] .= u ./ rd.wq[rd.Fmask]
-# function calc_surface_integral!(du, u, domain::PointCloudDomain, equations,
-#                                 surface_integral::SurfaceIntegralWeakForm,
-#                                 solver::DGMultiSBP, cache)
-#     rd = solver.basis
-#     @unpack flux_face_values, lift_scalings = cache
-
-#     @threaded for e in eachelement(domain, solver, cache)
-#         for i in each_face_node(domain, solver, cache)
-#             fid = rd.Fmask[i]
-#             du[fid, e] = du[fid, e] + flux_face_values[i, e] * lift_scalings[i]
-#         end
-#     end
-# end
 
 # do nothing for periodic (default) boundary conditions
 function calc_boundary_flux!(cache, t, boundary_conditions::BoundaryConditionPeriodic,
@@ -613,44 +459,6 @@ function calc_single_boundary_flux!(cache, t, boundary_condition, boundary_key, 
     # Note: modifying the values of the reshaped array modifies the values of cache.flux_face_values.
     # However, we don't have to re-reshape, since cache.flux_face_values still retains its original shape.
 end
-
-# # inverts Jacobian and scales by -1.0
-# function invert_jacobian!(du, domain::PointCloudDomain, equations,
-#                           solver::PointCloudSolver, cache;
-#                           scaling = -1)
-#     @threaded for e in eachelement(domain, solver, cache)
-#         invJ = cache.invJ[1, e]
-#         for i in axes(du, 1)
-#             du[i, e] *= scaling * invJ
-#         end
-#     end
-# end
-
-# # inverts Jacobian using weight-adjusted DG, and scales by -1.0.
-# # - Chan, Jesse, Russell J. Hewett, and Timothy Warburton.
-# #   "Weight-adjusted discontinuous Galerkin methods: curvilinear meshes."
-# #   https://doi.org/10.1137/16M1089198
-# function invert_jacobian!(du, domain::PointCloudDomain{NDIMS, <:NonAffine}, equations,
-#                           solver::PointCloudSolver, cache; scaling = -1) where {NDIMS}
-#     # Vq = interpolation matrix to quadrature points, Pq = quadrature-based L2 projection matrix
-#     (; Pq, Vq) = solver.basis
-#     (; local_values_threaded, invJ) = cache
-
-#     @threaded for e in eachelement(domain, solver, cache)
-#         du_at_quad_points = local_values_threaded[Threads.threadid()]
-
-#         # interpolate solution to quadrature
-#         apply_to_each_field(mul_by!(Vq), du_at_quad_points, view(du, :, e))
-
-#         # scale by quadrature points
-#         for i in eachindex(du_at_quad_points)
-#             du_at_quad_points[i] *= scaling * invJ[i, e]
-#         end
-
-#         # project back to polynomials
-#         apply_to_each_field(mul_by!(Pq), view(du, :, e), du_at_quad_points)
-#     end
-# end
 
 # Multiple calc_sources! to resolve method ambiguities
 function calc_sources!(du, u, t, source_terms::Nothing,
