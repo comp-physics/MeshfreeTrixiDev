@@ -9,6 +9,7 @@ using Trixi: True, False
 using NearestNeighbors
 using LinearAlgebra
 using SparseArrays
+using StructArrays
 
 includet("../header.jl")
 
@@ -43,7 +44,7 @@ domain = PointCloudDomain(rbf, casename, boundary_names)
 
 # Instantiate Semidiscretization
 equations = CompressibleEulerEquations2D(1.4)
-initial_condition = initial_condition_weak_blast_wave
+initial_condition = initial_condition_constant
 boundary_conditions = (; :inlet => BoundaryConditionDirichlet(initial_condition),
                        :outlet => BoundaryConditionNeumann(initial_condition),
                        :rest => boundary_condition_slip_wall)
@@ -52,3 +53,12 @@ semi = SemidiscretizationHyperbolic(domain, equations,
                                     boundary_conditions = boundary_conditions)
 tspan = (0.0, 0.4)
 ode = semidiscretize(semi, tspan)
+
+# Working through cache and operator details
+includet("../utilities/helper.jl")
+show_ft(semi.cache)
+u = deepcopy(ode.u0)
+du = deepcopy(ode.u0)
+n = length(u)
+A = sprand(n, n, 0.01)
+apply_to_each_field(mul_by!(A), du, u)
