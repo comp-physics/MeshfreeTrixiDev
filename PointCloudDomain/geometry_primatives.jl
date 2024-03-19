@@ -152,13 +152,13 @@ _short_typeof(approx_type::RBF{<:PolyharmonicSpline}) = "RBF{PolyharmonicSpline}
 Constructor for `RefPointData` for different element types.
 """
 # Default RefPointData
-function RefPointData(elem::Union{Point1D, Point2D, Point3D},
-                      approx_type::RBF{DefaultRBFType}, N)
+function RefPointData(elem::AbstractElemShape{Dim},
+                      approx_type::RBF{DefaultRBFType}, N) where {Dim}
     # Construct basis functions on reference element
     # Default to PolyharmonicSpline RBFs w/ appended polynomials
     Nrbf = approx_type.Nrbf
     approx_type = RBF(PolyharmonicSpline(Nrbf))
-    F = nothing
+    F = create_basis(elem, approx_type, N)
 
     # Number of neighbors
     d = dimensionality(elem)
