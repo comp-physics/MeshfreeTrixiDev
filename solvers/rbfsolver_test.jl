@@ -1,15 +1,4 @@
 using Revise
-using Trixi
-using ConstructionBase
-using MuladdMacro
-using Trixi: @threaded
-using Trixi: @trixi_timeit
-using Trixi: summary_header, summary_line, summary_footer, increment_indent
-using Trixi: True, False
-using NearestNeighbors
-using LinearAlgebra
-using SparseArrays
-using StructArrays
 
 includet("../header.jl")
 
@@ -67,3 +56,4 @@ apply_to_each_field(mul_by!(A), du, u)
 # A = rbf_block(basis.f.rbf, basis; N = 3)
 rbf_func = concrete_rbf_flux_basis(basis.f.rbf, basis)
 poly_func = concrete_poly_flux_basis(basis.f.poly, basis)
+compute_flux_operator(solver, domain)

@@ -69,10 +69,47 @@ function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}) where {NDIMS
     end
 end
 
-function rbf_block(rbf_func, basis::RefPointData{NDIMS}; N::Int) where {NDIMS}
+function rbf_block(rbf_expr, basis::RefPointData{NDIMS},
+                   X::Vector{SVector{NDIMS, T}}) where {NDIMS, T}
+    # Generate RBF Matrix for one interpolation point
+    #
+    # Inputs:   rbf_expr - RBF Function
+    #           X - Input Point Set
+    #
+    # Outputs:  Φ - RBF Matrix Block
+
+    m = lastindex(X)
+    D = Array{SVector{NDIMS, T}, 2}(undef, m, m)
+
+    for j in eachindex(X)
+        for i in eachindex(X)
+            D[i, j] = X[i] - X[j]
+        end
+    end
+
+    return rbf_expr.(D)
 end
 
-function poly_block(poly_func, basis::RefPointData{NDIMS}; N::Int) where {NDIMS}
+function poly_block(poly_func, basis::RefPointData{NDIMS},
+                    X::Vector{SVector{NDIMS, T}}) where {NDIMS, T}
+    # Generate the polynomial basis block for one
+    #  interpolation point
+    #
+    # Inputs:   F - StaticPolynomial Array
+    #           X - Input Point Set
+    #
+    # Outputs:  P - Monomial Basis Block
+
+    n = length(poly_func)
+    m = lastindex(X)
+
+    P = zeros(T, m, n)
+
+    for i in eachindex(X)
+        P[i, :] = StaticPolynomials.evaluate(poly_func, X[i])
+    end
+
+    return P
 end
 
 # Port of generator_operator from RBFD to generate Dx and Dy flux operators
@@ -81,7 +118,17 @@ function compute_flux_operator(solver::RBFSolver,
                                domain::PointCloudDomain{NDIMS}) where {NDIMS}
     @unpack basis = solver
     @unpack rbf, poly = basis.f
+    @unpack points, neighbors, num_points, num_neighbors = domain.pd
 
     rbf_func = concrete_rbf_flux_basis(rbf, basis)
     poly_func = concrete_poly_flux_basis(poly, basis)
+
+    # Solve RBF interpolation system for all points
+    for e in 1#eachelement(domain, solver)
+        neighbor_idx = domain.pd.neighbors[e]
+        X = domain.pd.points[neighbor_idx]
+        R = rbf_block(rbf_func.rbf_expr, basis, X)
+        P = poly_block(poly_func.poly_expr, basis, X)
+        return (R, P)
+    end
 end
