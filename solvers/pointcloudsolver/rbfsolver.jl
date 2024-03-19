@@ -177,7 +177,7 @@ function Trixi.create_cache(domain::PointCloudDomain{NDIMS}, equations,
     # rbf_differentiation_matrices = compute_flux_operators(domain, solver, equations)
     # This will compute diff_mat with two entries, the first being the dx,
     # and the second being dy. 
-    rbf_differentiation_matrices = nothing
+    rbf_differentiation_matrices = compute_flux_operator(solver, domain)
     # ∫f(u) * dv/dx_i = ∑_j (Vq*Drst[i])'*diagm(wq)*(rstxyzJ[i,j].*f(Vq*u))
     # rbf_differentiation_matrices = map(D -> -M \ ((Vq * D)' * Diagonal(wq)), Drst)
 
