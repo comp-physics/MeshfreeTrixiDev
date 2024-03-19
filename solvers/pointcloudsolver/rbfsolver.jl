@@ -343,24 +343,28 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
 end
 
 # do nothing for periodic (default) boundary conditions
-function calc_boundary_flux!(cache, t, boundary_conditions::BoundaryConditionPeriodic,
+# change signature to include du, u in order 
+# to implement Dirichlet BCs
+function calc_boundary_flux!(du, u, cache, t,
+                             boundary_conditions::BoundaryConditionPeriodic,
                              domain, have_nonconservative_terms, equations,
                              solver::PointCloudSolver)
     nothing
 end
 
-function calc_boundary_flux!(cache, t, boundary_conditions, domain,
+function calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
                              have_nonconservative_terms, equations,
                              solver::PointCloudSolver)
     for (key, value) in zip(keys(boundary_conditions), boundary_conditions)
-        calc_single_boundary_flux!(cache, t, value,
+        calc_single_boundary_flux!(du, u, cache, t, value,
                                    key,
                                    domain, have_nonconservative_terms, equations,
                                    solver)
     end
 end
 
-function calc_single_boundary_flux!(cache, t, boundary_condition, boundary_key, domain,
+function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundary_key,
+                                    domain,
                                     have_nonconservative_terms::False, equations,
                                     solver::PointCloudSolver{NDIMS}) where {NDIMS}
     rd = solver.basis
@@ -404,7 +408,8 @@ function calc_single_boundary_flux!(cache, t, boundary_condition, boundary_key, 
     # However, we don't have to re-reshape, since cache.flux_face_values still retains its original shape.
 end
 
-function calc_single_boundary_flux!(cache, t, boundary_condition, boundary_key, domain,
+function calc_single_boundary_flux!(du, u, cache, t, boundary_condition, boundary_key,
+                                    domain,
                                     have_nonconservative_terms::True, equations,
                                     solver::PointCloudSolver{NDIMS}) where {NDIMS}
     rd = solver.basis
@@ -502,13 +507,13 @@ function rhs!(du, u, t, domain, equations,
     #                         solver)
     # end
 
-    @trixi_timeit timer() "interface flux" begin
-        calc_interface_flux!(cache, solver.surface_integral, domain,
-                             have_nonconservative_terms(equations), equations, solver)
-    end
+    # @trixi_timeit timer() "interface flux" begin
+    #     calc_interface_flux!(cache, solver.surface_integral, domain,
+    #                          have_nonconservative_terms(equations), equations, solver)
+    # end
 
     @trixi_timeit timer() "boundary flux" begin
-        calc_boundary_flux!(cache, t, boundary_conditions, domain,
+        calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
                             have_nonconservative_terms(equations), equations, solver)
     end
 
