@@ -217,6 +217,16 @@ function poly_basis(elem::AbstractElemShape{Dim},
     # Specialize this function to create polynomial bases for specific
     # RBF types
 
-    # elem contains dimensionality
-    # N contains polynomial order
+    if Dim == 1
+        @polyvar x
+        poly = monomials([x], 0:N)
+    elseif Dim == 2
+        @polyvar x y
+        poly = monomials([x, y], 0:N)
+    elseif Dim == 3
+        @polyvar x y z
+        poly = monomials([x, y, z], 0:N)
+    end
+
+    return poly
 end

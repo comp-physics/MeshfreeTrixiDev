@@ -20,4 +20,5 @@ basis = RefPointData(Point1D(), RBF(PolyharmonicSpline(5)), 3)
 rbf = RBFSolver(basis, RBFFDEngine())
 
 # Specialized Methods
+basis = PointCloudBasis(Point3D(), 3; approximation_type = RBF(PolyharmonicSpline(5)))
 basis = PointCloudBasis(Point2D(), 3; approximation_type = RBF(PolyharmonicSpline(5)))
