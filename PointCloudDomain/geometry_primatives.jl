@@ -172,7 +172,7 @@ function RefPointData(elem::AbstractElemShape{Dim},
                       approx_type::RBF, N) where {Dim}
     # Construct basis functions on reference element
     # Default to PolyharmonicSpline RBFs w/ appended polynomials
-    F = create_basis(elem, approx_type)
+    F = create_basis(elem, approx_type, N)
 
     # Number of neighbors
     # d = dimensionality(elem)
@@ -183,20 +183,37 @@ function RefPointData(elem::AbstractElemShape{Dim},
 end
 
 function create_basis(elem::AbstractElemShape{Dim},
-                      approx_type::RBF) where {Dim}
-    rbf_basis = rbf_basis(elem, approx_type)
-    poly_basis = poly_basis(elem, N)
+                      approx_type::RBF, N) where {Dim}
+    rbf = rbf_basis(elem, approx_type, N)
+    poly = poly_basis(elem, approx_type, N)
+
+    return (; rbf, poly)
 end
 
-function rbf_basis(elem::Point2D, approx_type::RBF{PolyharmonicSpline})
+function rbf_basis(elem::AbstractElemShape{Dim},
+                   approx_type::RBF{PolyharmonicSpline}, N) where {Dim}
     # Specialize this function to create RBF bases for specific
     # RBF types
+    p = approx_type.Nrbf
+    if Dim == 1
+        @variables x
+        rbf = sqrt(x^2)^p
+        rbf_expr = build_function(rbf, [x]; expression = Val{false})
+    elseif Dim == 2
+        @variables x y
+        rbf = sqrt(x^2 + y^2)^p
+        rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
+    elseif Dim == 3
+        @variables x y z
+        rbf = sqrt(x^2 + y^2 + z^2)^p
+        rbf_expr = build_function(rbf, [x, y, z]; expression = Val{false})
+    end
 
-    # elem contains dimensionality 
-    # rbf_type.Nrbf contains RBF order
+    return rbf
 end
 
-function poly_basis(elem::Point2D, N)
+function poly_basis(elem::AbstractElemShape{Dim},
+                    approx_type::RBF, N) where {Dim}
     # Specialize this function to create polynomial bases for specific
     # RBF types
 
