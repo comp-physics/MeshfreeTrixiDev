@@ -168,16 +168,38 @@ function RefPointData(elem::Union{Point1D, Point2D, Point3D},
     return RefPointData(elem, approx_type, N, NV, F)
 end
 
-function RefPointData(elem::Union{Point1D, Point2D, Point3D},
-                      approx_type::RBF, N)
+function RefPointData(elem::AbstractElemShape{Dim},
+                      approx_type::RBF, N) where {Dim}
     # Construct basis functions on reference element
     # Default to PolyharmonicSpline RBFs w/ appended polynomials
-    F = nothing
+    F = create_basis(elem, approx_type)
 
     # Number of neighbors
-    d = dimensionality(elem)
+    # d = dimensionality(elem)
     min_NV = [10, 15, 20]
-    NV = max(2 * binomial(N + d, d), min_NV[d])
+    NV = max(2 * binomial(N + Dim, Dim), min_NV[Dim])
 
     return RefPointData(elem, approx_type, N, NV, F)
+end
+
+function create_basis(elem::AbstractElemShape{Dim},
+                      approx_type::RBF) where {Dim}
+    rbf_basis = rbf_basis(elem, approx_type)
+    poly_basis = poly_basis(elem, N)
+end
+
+function rbf_basis(elem::Point2D, approx_type::RBF{PolyharmonicSpline})
+    # Specialize this function to create RBF bases for specific
+    # RBF types
+
+    # elem contains dimensionality 
+    # rbf_type.Nrbf contains RBF order
+end
+
+function poly_basis(elem::Point2D, N)
+    # Specialize this function to create polynomial bases for specific
+    # RBF types
+
+    # elem contains dimensionality
+    # N contains polynomial order
 end
