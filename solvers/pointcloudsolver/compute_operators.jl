@@ -116,7 +116,7 @@ function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}, k::Int) wher
         # @polyvar x # diff wrt existing vars, new polyvar doesn't work
         poly_xk = deepcopy(poly)
         for i in 1:k # Differentiate k-times
-            poly_xk = differentiate.(poly_xk, poly_xk[end].vars[1])
+            poly_xk = differentiate.(poly_xk, poly[end].vars[1])
         end
         f = StaticPolynomials.Polynomial.(poly)
         f_xk = StaticPolynomials.Polynomial.(poly_xk)
@@ -129,8 +129,8 @@ function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}, k::Int) wher
         poly_xk = deepcopy(poly)
         poly_yk = deepcopy(poly)
         for i in 1:k # Differentiate k-times
-            poly_xk = differentiate.(poly_xk, poly_xk[end].vars[1])
-            poly_yk = differentiate.(poly_yk, poly_yk[end].vars[2])
+            poly_xk = differentiate.(poly_xk, poly[end].vars[1])
+            poly_yk = differentiate.(poly_yk, poly[end].vars[2])
         end
         f = StaticPolynomials.Polynomial.(poly)
         f_xk = StaticPolynomials.Polynomial.(poly_xk)
@@ -147,9 +147,9 @@ function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}, k::Int) wher
         poly_yk = deepcopy(poly)
         poly_zk = deepcopy(poly)
         for i in 1:k # Differentiate k-times
-            poly_xk = differentiate.(poly_xk, poly_xk[end].vars[1])
-            poly_yk = differentiate.(poly_yk, poly_yk[end].vars[2])
-            poly_zk = differentiate.(poly_zk, poly_zk[end].vars[3])
+            poly_xk = differentiate.(poly_xk, poly[end].vars[1])
+            poly_yk = differentiate.(poly_yk, poly[end].vars[2])
+            poly_zk = differentiate.(poly_zk, poly[end].vars[3])
         end
         f = StaticPolynomials.Polynomial.(poly)
         f_xk = StaticPolynomials.Polynomial.(poly_xk)
@@ -372,9 +372,9 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dx_loc[i, :] = weights[1:(num_neighbors), 1]
-        Dy_loc[i, :] = weights[1:(num_neighbors), 2]
-        E_loc[i, :] = weights[1:(num_neighbors), 3]
+        Dx_loc[e, :] = weights[1:(num_neighbors), 1]
+        Dy_loc[e, :] = weights[1:(num_neighbors), 2]
+        E_loc[e, :] = weights[1:(num_neighbors), 3]
     end
     # Generate Sparse Matrices from Local Operator Matrices
     idx_rows = repeat((eachindex(points))', num_neighbors)'
@@ -416,9 +416,9 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dx_loc[i, :] = weights[1:(num_neighbors), 1]
+        Dx_loc[e, :] = weights[1:(num_neighbors), 1]
         # Dy_loc[i, :] = weights[1:(num_neighbors), 2]
-        E_loc[i, :] = weights[1:(num_neighbors), 2]
+        E_loc[e, :] = weights[1:(num_neighbors), 2]
     end
     # Generate Sparse Matrices from Local Operator Matrices
     idx_rows = repeat((eachindex(points))', num_neighbors)'
@@ -461,10 +461,10 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dx_loc[i, :] = weights[1:(num_neighbors), 1]
-        Dy_loc[i, :] = weights[1:(num_neighbors), 2]
-        Dz_loc[i, :] = weights[1:(num_neighbors), 3]
-        E_loc[i, :] = weights[1:(num_neighbors), 4]
+        Dx_loc[e, :] = weights[1:(num_neighbors), 1]
+        Dy_loc[e, :] = weights[1:(num_neighbors), 2]
+        Dz_loc[e, :] = weights[1:(num_neighbors), 3]
+        E_loc[e, :] = weights[1:(num_neighbors), 4]
     end
     # Generate Sparse Matrices from Local Operator Matrices
     idx_rows = repeat((eachindex(points))', num_neighbors)'
@@ -509,9 +509,9 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dxk_loc[i, :] = weights[1:(num_neighbors), 1]
-        Dyk_loc[i, :] = weights[1:(num_neighbors), 2]
-        E_loc[i, :] = weights[1:(num_neighbors), 3]
+        Dxk_loc[e, :] = weights[1:(num_neighbors), 1]
+        Dyk_loc[e, :] = weights[1:(num_neighbors), 2]
+        E_loc[e, :] = weights[1:(num_neighbors), 3]
     end
     # Generate Sparse Matrices from Local Operator Matrices
     idx_rows = repeat((eachindex(points))', num_neighbors)'
@@ -555,10 +555,10 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dxk_loc[i, :] = weights[1:(num_neighbors), 1]
-        Dyk_loc[i, :] = weights[1:(num_neighbors), 2]
-        Dzk_loc[i, :] = weights[1:(num_neighbors), 3]
-        E_loc[i, :] = weights[1:(num_neighbors), 4]
+        Dxk_loc[e, :] = weights[1:(num_neighbors), 1]
+        Dyk_loc[e, :] = weights[1:(num_neighbors), 2]
+        Dzk_loc[e, :] = weights[1:(num_neighbors), 3]
+        E_loc[e, :] = weights[1:(num_neighbors), 4]
     end
     # Generate Sparse Matrices from Local Operator Matrices
     idx_rows = repeat((eachindex(points))', num_neighbors)'
@@ -601,8 +601,8 @@ function compute_flux_operator(solver::RBFSolver,
         rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
         weights = M \ rhs
         # Extract RBF Stencil Weights
-        Dxk_loc[i, :] = weights[1:(num_neighbors), 1]
-        E_loc[i, :] = weights[1:(num_neighbors), 2]
+        Dxk_loc[e, :] = weights[1:(num_neighbors), 1]
+        E_loc[e, :] = weights[1:(num_neighbors), 2]
     end
     # Generate Sparse Matrices from Local Operator Matrices
     idx_rows = repeat((eachindex(points))', num_neighbors)'

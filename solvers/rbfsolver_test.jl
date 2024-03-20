@@ -68,3 +68,6 @@ apply_to_each_field(mul_by!(A), du, u)
 rbf_func = concrete_rbf_flux_basis(basis.f.rbf, basis)
 poly_func = concrete_poly_flux_basis(basis.f.poly, basis)
 rbf_differentiation_matrices = compute_flux_operator(solver, domain)
+
+# Test source_terms
+source_hv = SourceHyperviscosityFlyer(solver, equations, domain; k = 4)
