@@ -39,7 +39,7 @@ function create_flyer_hv_cache(solver::PointCloudSolver, equations,
 
     # Create the actual operators
     # hv_differentiation_matrices operator
-    hv_differentiation_matrices = create_flyer_hv_operator(solver, equations, domain)
+    hv_differentiation_matrices = compute_flux_operator(solver, domain, k)
 
     return (; hv_differentiation_matrices)
 end

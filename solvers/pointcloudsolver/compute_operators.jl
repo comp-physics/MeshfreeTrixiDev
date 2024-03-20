@@ -32,6 +32,47 @@ function concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}) where {NDIMS}
     end
 end
 
+# Specialized Basis generation for specific derivative order
+function concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}, k::Int) where {NDIMS}
+    if NDIMS == 1
+        @variables x
+        Dxk = Differential(x)^k
+        rbf_xk = simplify(expand_derivatives(Dxk(rbf)))
+        rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
+        rbf_xk_expr = build_function(rbf_xk, [x, y]; expression = Val{false})
+        return (; rbf_expr,
+                rbf_x_expr = rbf_xk_expr)
+    elseif NDIMS == 2
+        @variables x y
+        Dxk = Differential(x)^k
+        Dyk = Differential(y)^k
+        rbf_xk = simplify(expand_derivatives(Dxk(rbf)))
+        rbf_yk = simplify(expand_derivatives(Dyk(rbf)))
+        rbf_expr = build_function(rbf, [x, y]; expression = Val{false})
+        rbf_xk_expr = build_function(rbf_xk, [x, y]; expression = Val{false})
+        rbf_yk_expr = build_function(rbf_yk, [x, y]; expression = Val{false})
+        return (; rbf_expr,
+                rbf_x_expr = rbf_xk_expr,
+                rbf_y_expr = rbf_yk_expr)
+    elseif NDIMS == 3
+        @variables x y z
+        Dxk = Differential(x)^k
+        Dyk = Differential(y)^k
+        Dzk = Differential(z)^k
+        rbf_xk = simplify(expand_derivatives(Dxk(rbf)))
+        rbf_yk = simplify(expand_derivatives(Dyk(rbf)))
+        rbf_zk = simplify(expand_derivatives(Dzk(rbf)))
+        rbf_expr = build_function(rbf, [x, y, z]; expression = Val{false})
+        rbf_xk_expr = build_function(rbf_xk, [x, y, z]; expression = Val{false})
+        rbf_yk_expr = build_function(rbf_yk, [x, y, z]; expression = Val{false})
+        rbf_zk_expr = build_function(rbf_zk, [x, y, z]; expression = Val{false})
+        return (; rbf_expr,
+                rbf_x_expr = rbf_xk_expr,
+                rbf_y_expr = rbf_yk_expr,
+                rbf_z_expr = rbf_zk_expr)
+    end
+end
+
 function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}) where {NDIMS}
     if NDIMS == 1
         # @polyvar x # diff wrt existing vars, new polyvar doesn't work
@@ -66,6 +107,62 @@ function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}) where {NDIMS
         poly_y_expr = PolynomialSystem(f_y...)
         poly_z_expr = PolynomialSystem(f_z...)
         return (; poly_expr, poly_x_expr, poly_y_expr, poly_z_expr)
+    end
+end
+
+# Specialized Basis generation for specific derivative order
+function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}, k::Int) where {NDIMS}
+    if NDIMS == 1
+        # @polyvar x # diff wrt existing vars, new polyvar doesn't work
+        poly_xk = deepcopy(poly)
+        for i in 1:k # Differentiate k-times
+            poly_xk = differentiate.(poly_xk, poly_xk[end].vars[1])
+        end
+        f = StaticPolynomials.Polynomial.(poly)
+        f_xk = StaticPolynomials.Polynomial.(poly_xk)
+        poly_expr = PolynomialSystem(f...)
+        poly_xk_expr = PolynomialSystem(f_xk...)
+        return (; poly_expr,
+                poly_x_expr = poly_xk_expr)
+    elseif NDIMS == 2
+        # @polyvar x y
+        poly_xk = deepcopy(poly)
+        poly_yk = deepcopy(poly)
+        for i in 1:k # Differentiate k-times
+            poly_xk = differentiate.(poly_xk, poly_xk[end].vars[1])
+            poly_yk = differentiate.(poly_yk, poly_yk[end].vars[2])
+        end
+        f = StaticPolynomials.Polynomial.(poly)
+        f_xk = StaticPolynomials.Polynomial.(poly_xk)
+        f_yk = StaticPolynomials.Polynomial.(poly_yk)
+        poly_expr = PolynomialSystem(f...)
+        poly_xk_expr = PolynomialSystem(f_xk...)
+        poly_yk_expr = PolynomialSystem(f_yk...)
+        return (; poly_expr,
+                poly_x_expr = poly_xk_expr,
+                poly_y_expr = poly_yk_expr)
+    elseif NDIMS == 3
+        # @polyvar x y z
+        poly_xk = deepcopy(poly)
+        poly_yk = deepcopy(poly)
+        poly_zk = deepcopy(poly)
+        for i in 1:k # Differentiate k-times
+            poly_xk = differentiate.(poly_xk, poly_xk[end].vars[1])
+            poly_yk = differentiate.(poly_yk, poly_yk[end].vars[2])
+            poly_zk = differentiate.(poly_zk, poly_zk[end].vars[3])
+        end
+        f = StaticPolynomials.Polynomial.(poly)
+        f_xk = StaticPolynomials.Polynomial.(poly_xk)
+        f_yk = StaticPolynomials.Polynomial.(poly_yk)
+        f_zk = StaticPolynomials.Polynomial.(poly_zk)
+        poly_expr = PolynomialSystem(f...)
+        poly_xk_expr = PolynomialSystem(f_xk...)
+        poly_yk_expr = PolynomialSystem(f_yk...)
+        poly_zk_expr = PolynomialSystem(f_zk...)
+        return (; poly_expr,
+                poly_x_expr = poly_xk_expr,
+                poly_y_expr = poly_yk_expr,
+                poly_xz_expr = poly_zk_expr)
     end
 end
 
@@ -137,6 +234,7 @@ end
 
 function poly_linearoperator(X::SVector{1, T}, poly_func::NamedTuple) where {T}
     # Generate RHS Corresponding to Linear Operators on RBF System
+    @unpack poly_expr, poly_x_expr = poly_func
     r_F = StaticPolynomials.evaluate(poly_expr, X)
     r_Fx = StaticPolynomials.evaluate(poly_x_expr, X)
 
@@ -380,4 +478,140 @@ function compute_flux_operator(solver::RBFSolver,
     Dy = sparse(vec(idx_rows), vec(idx_columns), vec(Dy_loc))
     Dz = sparse(vec(idx_rows), vec(idx_columns), vec(Dz_loc))
     return [Dx, Dy, Dz]
+end
+
+# Specialized operator generation for specific derivative order
+function compute_flux_operator(solver::RBFSolver,
+                               domain::PointCloudDomain{2}, k::Int)
+    # Compute specific derivative operators
+    @unpack basis = solver
+    @unpack rbf, poly = basis.f
+    @unpack points, neighbors, num_points, num_neighbors = domain.pd
+
+    rbf_func = concrete_rbf_flux_basis(rbf, basis, k)
+    poly_func = concrete_poly_flux_basis(poly, basis, k)
+
+    # Solve RBF interpolation system for all points
+    E_loc = zeros(num_points, num_neighbors)
+    Dxk_loc = zeros(num_points, num_neighbors)
+    Dyk_loc = zeros(num_points, num_neighbors)
+    for e in eachelement(domain, solver)
+        # Create Interpolation System
+        neighbor_idx = neighbors[e]
+        local_points = points[neighbor_idx]
+        local_points_shifted = shift_stencil(local_points)
+        R = rbf_block(rbf_func.rbf_expr, basis, local_points_shifted)
+        P = poly_block(poly_func.poly_expr, basis, local_points_shifted)
+        M = interpolation_block(R, P)
+        # Assemble RHS
+        poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
+        rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
+        rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
+        weights = M \ rhs
+        # Extract RBF Stencil Weights
+        Dxk_loc[i, :] = weights[1:(num_neighbors), 1]
+        Dyk_loc[i, :] = weights[1:(num_neighbors), 2]
+        E_loc[i, :] = weights[1:(num_neighbors), 3]
+    end
+    # Generate Sparse Matrices from Local Operator Matrices
+    idx_rows = repeat((eachindex(points))', num_neighbors)'
+    idx_columns = Array{eltype(neighbors[1])}(undef, num_points, num_neighbors) # Change to eltype of existing indices
+    for i in eachindex(points)
+        idx_columns[i, :] = neighbors[i]
+    end
+    ### Convert to Generate Sparse Matrix 
+    E = sparse(vec(idx_rows), vec(idx_columns), vec(E_loc))
+    Dxk = sparse(vec(idx_rows), vec(idx_columns), vec(Dxk_loc))
+    Dyk = sparse(vec(idx_rows), vec(idx_columns), vec(Dyk_loc))
+    return [Dxk, Dyk]
+end
+
+function compute_flux_operator(solver::RBFSolver,
+                               domain::PointCloudDomain{3}, k::Int)
+    # Compute specific derivative operators
+    @unpack basis = solver
+    @unpack rbf, poly = basis.f
+    @unpack points, neighbors, num_points, num_neighbors = domain.pd
+
+    rbf_func = concrete_rbf_flux_basis(rbf, basis, k)
+    poly_func = concrete_poly_flux_basis(poly, basis, k)
+
+    # Solve RBF interpolation system for all points
+    E_loc = zeros(num_points, num_neighbors)
+    Dxk_loc = zeros(num_points, num_neighbors)
+    Dyk_loc = zeros(num_points, num_neighbors)
+    Dzk_loc = zeros(num_points, num_neighbors)
+    for e in eachelement(domain, solver)
+        # Create Interpolation System
+        neighbor_idx = neighbors[e]
+        local_points = points[neighbor_idx]
+        local_points_shifted = shift_stencil(local_points)
+        R = rbf_block(rbf_func.rbf_expr, basis, local_points_shifted)
+        P = poly_block(poly_func.poly_expr, basis, local_points_shifted)
+        M = interpolation_block(R, P)
+        # Assemble RHS
+        poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
+        rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
+        rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
+        weights = M \ rhs
+        # Extract RBF Stencil Weights
+        Dxk_loc[i, :] = weights[1:(num_neighbors), 1]
+        Dyk_loc[i, :] = weights[1:(num_neighbors), 2]
+        Dzk_loc[i, :] = weights[1:(num_neighbors), 3]
+        E_loc[i, :] = weights[1:(num_neighbors), 4]
+    end
+    # Generate Sparse Matrices from Local Operator Matrices
+    idx_rows = repeat((eachindex(points))', num_neighbors)'
+    idx_columns = Array{eltype(neighbors[1])}(undef, num_points, num_neighbors) # Change to eltype of existing indices
+    for i in eachindex(points)
+        idx_columns[i, :] = neighbors[i]
+    end
+    ### Convert to Generate Sparse Matrix 
+    E = sparse(vec(idx_rows), vec(idx_columns), vec(E_loc))
+    Dxk = sparse(vec(idx_rows), vec(idx_columns), vec(Dxk_loc))
+    Dyk = sparse(vec(idx_rows), vec(idx_columns), vec(Dyk_loc))
+    Dzk = sparse(vec(idx_rows), vec(idx_columns), vec(Dzk_loc))
+    return [Dxk, Dyk, Dzk]
+end
+
+function compute_flux_operator(solver::RBFSolver,
+                               domain::PointCloudDomain{1}, k::Int)
+    # Compute specific derivative operators
+    @unpack basis = solver
+    @unpack rbf, poly = basis.f
+    @unpack points, neighbors, num_points, num_neighbors = domain.pd
+
+    rbf_func = concrete_rbf_flux_basis(rbf, basis, k)
+    poly_func = concrete_poly_flux_basis(poly, basis, k)
+
+    # Solve RBF interpolation system for all points
+    E_loc = zeros(num_points, num_neighbors)
+    Dxk_loc = zeros(num_points, num_neighbors)
+    for e in eachelement(domain, solver)
+        # Create Interpolation System
+        neighbor_idx = neighbors[e]
+        local_points = points[neighbor_idx]
+        local_points_shifted = shift_stencil(local_points)
+        R = rbf_block(rbf_func.rbf_expr, basis, local_points_shifted)
+        P = poly_block(poly_func.poly_expr, basis, local_points_shifted)
+        M = interpolation_block(R, P)
+        # Assemble RHS
+        poly_rhs = poly_linearoperator(local_points_shifted[1], poly_func)
+        rbf_rhs = rbf_linearoperator(local_points_shifted, rbf_func)
+        rhs = assemble_rhs(rbf_rhs, poly_rhs, basis)
+        weights = M \ rhs
+        # Extract RBF Stencil Weights
+        Dxk_loc[i, :] = weights[1:(num_neighbors), 1]
+        E_loc[i, :] = weights[1:(num_neighbors), 2]
+    end
+    # Generate Sparse Matrices from Local Operator Matrices
+    idx_rows = repeat((eachindex(points))', num_neighbors)'
+    idx_columns = Array{eltype(neighbors[1])}(undef, num_points, num_neighbors) # Change to eltype of existing indices
+    for i in eachindex(points)
+        idx_columns[i, :] = neighbors[i]
+    end
+    ### Convert to Generate Sparse Matrix 
+    E = sparse(vec(idx_rows), vec(idx_columns), vec(E_loc))
+    Dxk = sparse(vec(idx_rows), vec(idx_columns), vec(Dxk_loc))
+    return [Dxk]
 end
