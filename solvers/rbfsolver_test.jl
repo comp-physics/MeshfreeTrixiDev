@@ -31,6 +31,17 @@ domain = PointCloudDomain(solver, casename, boundary_names)
 # scatter!(boundary_x, boundary_y, markersize = 10.0)
 # quiver!(boundary_x, boundary_y, normals_dx, normals_dy, lengthscale = 0.05)
 
+# Instantiate source terms here?
+# We need access to solver, basis, and domain 
+# since source_hyperviscosity(solver, equations, domain) 
+# and source_tominec_rv(solver, equations, domain)
+# require basis info for bases and domain info for 
+# create the actual operators. Also eqn info for 
+# number of eqn perhaps?
+
+# Also need a specific callback to update the time history
+# history_callback = HistoryCallback()
+
 # Instantiate Semidiscretization
 equations = CompressibleEulerEquations2D(1.4)
 initial_condition = initial_condition_constant
