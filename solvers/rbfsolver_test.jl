@@ -78,3 +78,5 @@ semi = SemidiscretizationHyperbolic(domain, equations,
                                     initial_condition, solver;
                                     boundary_conditions = boundary_conditions,
                                     source_terms = sources)
+tspan = (0.0, 0.4)
+ode = semidiscretize(semi, tspan)

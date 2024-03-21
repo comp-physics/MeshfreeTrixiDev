@@ -42,6 +42,11 @@ end
     end
 end
 
+# Convenience Methods for reseting struct array
+function set_to_zero!(array::StructArray)
+    StructArrays.foreachfield(col -> fill!(col, 0.0), array)
+end
+
 """
     eachdim(domain)
 
@@ -234,7 +239,8 @@ function Trixi.compute_coefficients!(u, initial_condition, t,
 
     # multiplying by Pq computes the L2 projection
     # Not doing projection for point cloud solver
-    apply_to_each_field(mul_by!(I), u, u_values)
+    # apply_to_each_field(mul_by!(I), u, u_values)
+    recursivecopy!(u, u_values)
 end
 
 # estimates the timestep based on polynomial degree and domain. Does not account for physics (e.g.,
