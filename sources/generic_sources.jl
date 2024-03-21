@@ -1,18 +1,15 @@
-# Multiple calc_sources! to resolve method ambiguities
-function calc_sources!(du, u, t, source_terms::Nothing,
-                       domain, equations, solver::PointCloudSolver, cache)
-    nothing
+struct SourceTerms
+    sources::NamedTuple
 end
 
-# uses quadrature + projection to compute source terms.
-function calc_sources!(du, u, t, source_terms,
-                       domain, equations, solver::PointCloudSolver, cache)
-    for source in values(source_terms)
-        source(du, u, t, domain, equations, solver, cache)
-    end
-end
+Base.iterate(terms::SourceTerms, state...) = iterate(terms.sources, state...)
+Base.length(terms::SourceTerms) = length(terms.sources)
+Base.collect(terms::SourceTerms) = collect(terms.sources)
+Base.keys(terms::SourceTerms) = keys(terms.sources)
+Base.values(terms::SourceTerms) = values(terms.sources)
+Base.pairs(terms::SourceTerms) = pairs(terms.sources)
 
-# Instead of dedicated function, use callable struct 
-# for each specific source term
-# function calc_single_source!()
-# end
+function Base.show(io::IO, terms::SourceTerms)
+    type_names = [String(nameof(typeof(source))) for (_, source) in pairs(terms.sources)]
+    print(io, join(type_names, ", "))
+end

@@ -317,11 +317,11 @@ function calc_fluxes!(du, u, domain::PointCloudDomain,
     for i in eachdim(domain)
         for e in eachelement(domain, solver, cache)
             flux_values[e] = flux(u_values[e], i, equations)
-            for j in eachdim(domain)
-                apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j],
-                                                  1),
-                                    du, flux_values)
-            end
+        end
+        for j in eachdim(domain)
+            apply_to_each_field(mul_by_accum!(rbf_differentiation_matrices[j],
+                                              1),
+                                du, flux_values)
         end
     end
     # @threaded for e in eachelement(domain, solver, cache)
@@ -471,25 +471,41 @@ function calc_sources!(du, u, t, source_terms::Nothing,
     nothing
 end
 
-# uses quadrature + projection to compute source terms.
+# Redefined to allow for generic sources include sources 
+# requiring operator application. Each source will
+# be a callable struct containing its own caches
 function calc_sources!(du, u, t, source_terms,
                        domain, equations, solver::PointCloudSolver, cache)
-    rd = solver.basis
-    pd = domain.pd
-    @unpack Pq = rd
-    @unpack u_values, local_values_threaded = cache
-    @threaded for e in eachelement(domain, solver, cache)
-        source_values = local_values_threaded[Threads.threadid()]
-
-        u_e = view(u_values, :, e) # u_values should already be computed from volume integral
-
-        for i in each_quad_node(domain, solver, cache)
-            source_values[i] = source_terms(u_e[i], SVector(getindex.(pd.xyzq, i, e)),
-                                            t, equations)
-        end
-        apply_to_each_field(mul_by_accum!(Pq), view(du, :, e), source_values)
+    for source in values(source_terms)
+        source(du, u, t, domain, equations, solver, cache)
     end
 end
+
+# # Multiple calc_sources! to resolve method ambiguities
+# function calc_sources!(du, u, t, source_terms::Nothing,
+#                        domain, equations, solver::PointCloudSolver, cache)
+#     nothing
+# end
+
+# # uses quadrature + projection to compute source terms.
+# function calc_sources!(du, u, t, source_terms,
+#                        domain, equations, solver::PointCloudSolver, cache)
+#     rd = solver.basis
+#     pd = domain.pd
+#     @unpack Pq = rd
+#     @unpack u_values, local_values_threaded = cache
+#     @threaded for e in eachelement(domain, solver, cache)
+#         source_values = local_values_threaded[Threads.threadid()]
+
+#         u_e = view(u_values, :, e) # u_values should already be computed from volume integral
+
+#         for i in each_quad_node(domain, solver, cache)
+#             source_values[i] = source_terms(u_e[i], SVector(getindex.(pd.xyzq, i, e)),
+#                                             t, equations)
+#         end
+#         apply_to_each_field(mul_by_accum!(Pq), view(du, :, e), source_values)
+#     end
+# end
 
 function rhs!(du, u, t, domain, equations,
               initial_condition, boundary_conditions::BC, source_terms::Source,

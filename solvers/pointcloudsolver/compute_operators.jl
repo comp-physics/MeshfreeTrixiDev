@@ -32,7 +32,7 @@ function concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}) where {NDIMS}
     end
 end
 
-# Specialized Basis generation for specific derivative order
+# Specialized Basis generation for k-th derivative order
 function concrete_rbf_flux_basis(rbf, basis::RefPointData{NDIMS}, k::Int) where {NDIMS}
     if NDIMS == 1
         @variables x
@@ -110,7 +110,7 @@ function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}) where {NDIMS
     end
 end
 
-# Specialized Basis generation for specific derivative order
+# Specialized Basis generation for k-th derivative order
 function concrete_poly_flux_basis(poly, basis::RefPointData{NDIMS}, k::Int) where {NDIMS}
     if NDIMS == 1
         # @polyvar x # diff wrt existing vars, new polyvar doesn't work
@@ -480,7 +480,7 @@ function compute_flux_operator(solver::RBFSolver,
     return [Dx, Dy, Dz]
 end
 
-# Specialized operator generation for specific derivative order
+# Specialized operator generation for k-th derivative order
 function compute_flux_operator(solver::RBFSolver,
                                domain::PointCloudDomain{2}, k::Int)
     # Compute specific derivative operators

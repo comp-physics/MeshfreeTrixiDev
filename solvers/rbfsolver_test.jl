@@ -70,4 +70,10 @@ poly_func = concrete_poly_flux_basis(basis.f.poly, basis)
 rbf_differentiation_matrices = compute_flux_operator(solver, domain)
 
 # Test source_terms
-source_hv = SourceHyperviscosityFlyer(solver, equations, domain; k = 4)
+source_hv = SourceHyperviscosityFlyer(solver, equations, domain; k = 2, c = 1.0)
+source_hv2 = SourceHyperviscosityTominec(solver, equations, domain; c = 1.0)
+sources = (; source_hv, source_hv2)
+semi = SemidiscretizationHyperbolic(domain, equations,
+                                    initial_condition, solver;
+                                    boundary_conditions = boundary_conditions,
+                                    source_terms = sources)

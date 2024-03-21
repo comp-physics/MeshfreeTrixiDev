@@ -25,23 +25,27 @@ end
 
 Construct a hyperviscosity source for an RBF-FD discretization.
 """
-function SourceHyperviscosityFlyer(solver, equations, domain; k = 4)
-    cache = (; create_flyer_hv_cache(solver, equations, domain, k)...)
+function SourceHyperviscosityFlyer(solver, equations, domain; k = 2, c = 1.0)
+    cache = (; create_flyer_hv_cache(solver, equations, domain, k, c)...)
 
     SourceHyperviscosityFlyer{typeof(cache)}(cache)
 end
 
 function create_flyer_hv_cache(solver::PointCloudSolver, equations,
-                               domain::PointCloudDomain, k::Int)
+                               domain::PointCloudDomain, k::Int, c::Real)
     # Get basis and domain info
     basis = solver.basis
     pd = domain.pd
 
     # Create the actual operators
     # hv_differentiation_matrices operator
-    hv_differentiation_matrices = compute_flux_operator(solver, domain, k)
+    # k is order of Laplacian, actual div order is 2k
+    hv_differentiation_matrices = compute_flux_operator(solver, domain, 2 * k)
 
-    return (; hv_differentiation_matrices)
+    # Scale hv by gamma 
+    gamma = c * domain.pd.dx_min^(2 * k)
+
+    return (; hv_differentiation_matrices, gamma, c)
 end
 
 function (source::SourceHyperviscosityFlyer)(du, u, t, domain, equations,
@@ -49,18 +53,85 @@ function (source::SourceHyperviscosityFlyer)(du, u, t, domain, equations,
     basis = solver.basis
     pd = domain.pd
     hv_differentiation_matrices = cache.hv_differentiation_matrices
+    gamma = cache.gamma
     @unpack rbf_differentiation_matrices, u_values, local_values_threaded = semi_cache
 
     # Compute the hyperviscous dissipation
-    flux_values = local_values_threaded[1]
+    # flux_values = local_values_threaded[1] # operator directly on u and du
     for i in eachdim(domain)
-        for e in eachelement(domain, solver, semi_cache)
-            flux_values[e] = flux(u_values[e], i, equations)
-            for j in eachdim(domain)
-                apply_to_each_field(mul_by_accum!(hv_differentiation_matrices[j],
-                                                  1),
-                                    du, flux_values)
-            end
+        for j in eachdim(domain)
+            apply_to_each_field(mul_by_accum!(hv_differentiation_matrices[j],
+                                              gamma),
+                                du, u)
         end
     end
+end
+
+"""
+    SourceHyperviscosityTominec
+
+A struct containing everything needed to describe a hyperviscous
+dissipation term for an RBF-FD discretization. 
+## References
+
+- Tominec (2023)
+  Residual Viscosity Stabilized RBF-FD Methods for Solving
+  Nonlinear Conservation Laws
+  [doi: 10.1007/s10915-022-02055-8](https://doi.org/10.1007/s10915-022-02055-8)
+Flyer implementation directly computes Δᵏ operator
+"""
+struct SourceHyperviscosityTominec{Cache}
+    cache::Cache
+
+    function SourceHyperviscosityTominec{Cache}(cache::Cache) where {
+                                                                     Cache}
+        new(cache)
+    end
+end
+
+"""
+    SourceHyperviscosityTominec(solver, equations, domain)
+
+Construct a hyperviscosity source for an RBF-FD discretization.
+Designed for k=2
+"""
+function SourceHyperviscosityTominec(solver, equations, domain; c = 1.0)
+    cache = (; create_tominec_hv_cache(solver, equations, domain, c)...)
+
+    SourceHyperviscosityTominec{typeof(cache)}(cache)
+end
+
+function create_tominec_hv_cache(solver::PointCloudSolver, equations,
+                                 domain::PointCloudDomain, c::Real)
+    # Get basis and domain info
+    basis = solver.basis
+    pd = domain.pd
+
+    # Create the actual operators
+    # hv_differentiation_matrices operator
+    # k is order of Laplacian, actual div order is 2k
+    initial_differentiation_matrices = compute_flux_operator(solver, domain, 2)
+    lap = sum(initial_differentiation_matrices)
+    # dxx_dyy = initial_differentiation_matrices[1] + initial_differentiation_matrices[2]
+    hv_differentiation_matrix = lap' * lap
+
+    # Scale hv by gamma 
+    gamma = c * domain.pd.dx_min^(2 * 2 + 0.5)
+
+    return (; hv_differentiation_matrix, gamma, c)
+end
+
+function (source::SourceHyperviscosityTominec)(du, u, t, domain, equations,
+                                               solver::PointCloudSolver, semi_cache)
+    basis = solver.basis
+    pd = domain.pd
+    hv_differentiation_matrix = cache.hv_differentiation_matrix
+    gamma = cache.gamma
+    @unpack rbf_differentiation_matrices, u_values, local_values_threaded = semi_cache
+
+    # Compute the hyperviscous dissipation
+    # flux_values = local_values_threaded[1] # operator directly on u and du
+    apply_to_each_field(mul_by_accum!(hv_differentiation_matrix,
+                                      gamma),
+                        du, u)
 end
