@@ -73,6 +73,7 @@ rbf_differentiation_matrices = compute_flux_operator(solver, domain)
 source_hv = SourceHyperviscosityFlyer(solver, equations, domain; k = 2, c = 1.0)
 source_hv2 = SourceHyperviscosityTominec(solver, equations, domain; c = 1.0)
 sources = (; source_hv, source_hv2)
+sources = SourceTerms(hv = source_hv, hv2 = source_hv2)
 semi = SemidiscretizationHyperbolic(domain, equations,
                                     initial_condition, solver;
                                     boundary_conditions = boundary_conditions,
