@@ -148,8 +148,7 @@ dissipation term for an RBF-FD discretization.
 struct SourceResidualViscosityTominec{Cache}
     cache::Cache
 
-    function SourceResidualViscosityTominec{Cache}(cache::Cache) where {
-                                                                        Cache}
+    function SourceResidualViscosityTominec{Cache}(cache::Cache) where {Cache}
         new(cache)
     end
 end
@@ -160,14 +159,14 @@ SourceResidualViscosityTominec(solver, equations, domain)
 Construct a targeted Residual Viscosity source for an RBF-FD discretization.
 Designed for k=2
 """
-function SourceResidualViscosityTominec(solver, equations, domain; c = 1.0)
-    cache = (; create_tominec_rv_cache(solver, equations, domain, c)...)
+function SourceResidualViscosityTominec(solver, equations, domain; c = 1.0, polydeg = 4)
+    cache = (; create_tominec_rv_cache(solver, equations, domain, c, polydeg)...)
 
     SourceResidualViscosityTominec{typeof(cache)}(cache)
 end
 
 function create_tominec_rv_cache(solver::PointCloudSolver, equations,
-                                 domain::PointCloudDomain, c::Real)
+                                 domain::PointCloudDomain, c::Real, polydeg::Int)
     # Get basis and domain info
     basis = solver.basis
     pd = domain.pd
@@ -184,11 +183,46 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     eps_uw = zeros(uEltype, pd.num_points)
     eps_rv = zeros(uEltype, pd.num_points)
     eps = zeros(uEltype, pd.num_points)
+    residual = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps_uw = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps_rv = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
 
-    return (; eps_uw, eps_rv, eps, time_history, sol_history)
+    # Need to finalize time_history and sol_history
+    # Will we use the same approach as before?
+    # Seems we would want to let the number length of time_history
+    # depend on the order of residual reconstruction
+    # Order of residual approximation has to match the 
+    # the approximation order of the spatial discretization
+    # Ref: Tominec (2023) Section 3.1
+    time_history = zeros(uEltype, polydeg + 1)
+    sol_history = allocate_nested_array(uEltype, nvars, (pd.num_points, polydeg + 1),
+                                        solver)
+
+    return (; eps_uw, eps_rv, eps, residual, time_history, sol_history)
+end
+
+function update_upwind_visc!(eps_uw, u,
+                             equations::CompressibleEulerEquations2D, domain, cache)
+    gamma = equations.gamma
+    set_to_zero!(eps_uw)
+
+    for idx in eachindex(eps_uw)
+        # Convert from conservative to primitive variables
+        rho, v1, v2, p = cons2prim(u[idx], equations)
+
+        # Compute local speed (magnitude of velocity) and sound speed
+        speed = sqrt(v1^2 + v2^2)
+        sound_speed = sqrt(gamma * p / rho)
+
+        # h_loc is minimum pairwise distance between points in a patch centered
+        # around x_i where patch consists of 5 points closest to x_i
+        # instead we just take the distance from x_i to the nearest neighbor
+        h_loc = norm(domain.pd.points[idx] - domain.pd.points[domain.pd.neighbors[idx][2]])
+
+        # Calculate upwind viscosity for the current point
+        eps_uw[idx] = 0.5 * h_loc * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
+    end
 end
 
 function update_upwind_visc!(eps_uw, u,
@@ -218,13 +252,12 @@ function (source::SourceResidualViscosityTominec)(du, u, t, domain, equations,
                                                   solver::PointCloudSolver, semi_cache)
     basis = solver.basis
     pd = domain.pd
-    @unpack eps_uw, eps_rv, eps, time_history, sol_history = cache
+    @unpack eps_uw, eps_rv, eps, residual = cache
     @unpack rbf_differentiation_matrices, u_values, local_values_threaded, rhs_local_threaded = semi_cache
 
     # Update eps
-    update_upwind_visc!(eps_uw, u, equations, domain, semi_cache)
-    # update_residual_visc!(eps_rv, u, u_values, local_values_threaded,
-    #                       rbf_differentiation_matrices)
+    update_upwind_visc!(eps_uw, u, equations, domain, cache)
+    # update_residual_visc!(eps_rv, residual, u, equations, domain, cache)
     # update_eps!(eps, eps_uw, eps_rv)
 
     # Compute the hyperviscous dissipation
