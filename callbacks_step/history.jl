@@ -110,43 +110,17 @@ end
 
 function update_approx_du!(approx_du, time_weights, time_history, sol_history,
                            success_iter, polydeg)
-    if success_iter == 0
-        # approx_du .= 0.0
-        set_to_zero!(approx_du)
-    elseif success_iter == 1
-        time_deriv_weights!(@view(time_weights[1:2]),
-                            @view(time_history[1:2]))
-        # @. approx_du = (1 / Δt) * (u_min1 - u_min2)
-        @. approx_du = time_weights[end] * sol_history[:, 1] +
-                       time_weights[end - 1] * sol_history[:, 2]
-    elseif success_iter == 2
-        time_deriv_weights!(@view(time_weights[1:3]),
-                            @view(time_history[1:3]))
-        # @. approx_du = (1 / Δt) * (3 / 2) * (u_min1 - (4 / 3) * u_min2 + (1 / 3) * u_min3)
-        @. approx_du = time_weights[end] * sol_history[:, 1] +
-                       time_weights[end - 1] * sol_history[:, 2] +
-                       time_weights[end - 2] * sol_history[:, 3]
-    elseif success_iter == 3
-        time_deriv_weights!(@view(time_weights[1:4]),
-                            @view(time_history[1:4]))
-        # @. approx_du = (1 / Δt) * (11 / 6) * (u_min1 - (18 / 11) * u_min2 + (9 / 11) * u_min3 - (2 / 11) * u_min4)
-        @. approx_du = time_weights[1] * sol_history[:, 1] +
-                       time_weights[2] * sol_history[:, 2] +
-                       time_weights[3] * sol_history[:, 3] +
-                       time_weights[4] * sol_history[:, 4]
-    else
-        time_deriv_weights!(@view(time_weights[1:5]),
-                            @view(time_history[1:5]))
-        # @. approx_du = (1 / Δt) * (25 / 12) * (u_min1 - (48 / 25) * u_min2 + (36 / 25) * u_min3 - (16 / 25) * u_min4 + (3 / 25) * u_min5)
-        @. approx_du = time_weights[1] * sol_history[:, 1] +
-                       time_weights[2] * sol_history[:, 2] +
-                       time_weights[3] * sol_history[:, 3] +
-                       time_weights[4] * sol_history[:, 4] +
-                       time_weights[5] * sol_history[:, 5]
-        # @printf("Full reconstruction, max(approx_du) = %f, min(approx_du) = %f \n", maximum(approx_du), minimum(approx_du))
-        # if maximum(approx_du) < 1e-10
-        #     @printf("time_history: %f, %f, %f, %f, %f \n\n", time_history[end-4], time_history[end-3], time_history[end-2], time_history[end-1], time_history[end])
-        # end
+    set_to_zero!(approx_du)
+
+    num_time_points = min(success_iter + 1, polydeg + 1)
+    if success_iter > 0
+        # Update the time weights for the current number of time points
+        time_deriv_weights!(@view(time_weights[1:num_time_points]),
+                            @view(time_history[1:num_time_points]))
+
+        for i in 1:num_time_points
+            approx_du .+= time_weights[i] .* sol_history[:, i]
+        end
     end
 
     return nothing
@@ -211,43 +185,43 @@ end
 #     return nothing
 # end
 
-function update_ddt!(approx_du, w, t, count, u_min1, u_min2, u_min3, u_min4, u_min5)
-    # Determine if step is updated or if we are still in the same step
-    # i.e. Do all the solutions have to be updated or only the most recent one if smaller time step is used
+# function update_ddt!(approx_du, w, t, count, u_min1, u_min2, u_min3, u_min4, u_min5)
+#     # Determine if step is updated or if we are still in the same step
+#     # i.e. Do all the solutions have to be updated or only the most recent one if smaller time step is used
 
-    if count == 0
-        approx_du .= 0.0
-    elseif count == 1
-        time_deriv_weights!(@view(w[(end - 1):end]),
-                            @view(t[(end - 1):end]))
-        # @. approx_du = (1 / Δt) * (u_min1 - u_min2)
-        @inbounds @. approx_du = w[end] * u_min1 + w[end - 1] * u_min2
-    elseif count == 2
-        time_deriv_weights!(@view(w[(end - 2):end]),
-                            @view(t[(end - 2):end]))
-        # @. approx_du = (1 / Δt) * (3 / 2) * (u_min1 - (4 / 3) * u_min2 + (1 / 3) * u_min3)
-        @inbounds @. approx_du = w[end] * u_min1 + w[end - 1] * u_min2 +
-                                 w[end - 2] * u_min3
-    elseif count == 3
-        time_deriv_weights!(@view(w[(end - 3):end]),
-                            @view(t[(end - 3):end]))
-        # @. approx_du = (1 / Δt) * (11 / 6) * (u_min1 - (18 / 11) * u_min2 + (9 / 11) * u_min3 - (2 / 11) * u_min4)
-        @inbounds @. approx_du = w[end] * u_min1 + w[end - 1] * u_min2 +
-                                 w[end - 2] * u_min3 +
-                                 w[end - 3] * u_min4
-    else
-        time_deriv_weights!(@view(w[(end - 4):end]),
-                            @view(t[(end - 4):end]))
-        # @. approx_du = (1 / Δt) * (25 / 12) * (u_min1 - (48 / 25) * u_min2 + (36 / 25) * u_min3 - (16 / 25) * u_min4 + (3 / 25) * u_min5)
-        @inbounds @. approx_du = w[end] * u_min1 + w[end - 1] * u_min2 +
-                                 w[end - 2] * u_min3 +
-                                 w[end - 3] * u_min4 + w[end - 4] * u_min5
-        # @printf("Full reconstruction, max(approx_du) = %f, min(approx_du) = %f \n", maximum(approx_du), minimum(approx_du))
-        # if maximum(approx_du) < 1e-10
-        #     @printf("time_history: %f, %f, %f, %f, %f \n\n", t[end-4], t[end-3], t[end-2], t[end-1], t[end])
-        # end
-    end
+#     if count == 0
+#         approx_du .= 0.0
+#     elseif count == 1
+#         time_deriv_weights!(@view(w[(end - 1):end]),
+#                             @view(t[(end - 1):end]))
+#         # @. approx_du = (1 / Δt) * (u_min1 - u_min2)
+#         @inbounds @. approx_du = w[end] * u_min1 + w[end - 1] * u_min2
+#     elseif count == 2
+#         time_deriv_weights!(@view(w[(end - 2):end]),
+#                             @view(t[(end - 2):end]))
+#         # @. approx_du = (1 / Δt) * (3 / 2) * (u_min1 - (4 / 3) * u_min2 + (1 / 3) * u_min3)
+#         @inbounds @. approx_du = w[end] * u_min1 + w[end - 1] * u_min2 +
+#                                  w[end - 2] * u_min3
+#     elseif count == 3
+#         time_deriv_weights!(@view(w[(end - 3):end]),
+#                             @view(t[(end - 3):end]))
+#         # @. approx_du = (1 / Δt) * (11 / 6) * (u_min1 - (18 / 11) * u_min2 + (9 / 11) * u_min3 - (2 / 11) * u_min4)
+#         @inbounds @. approx_du = w[end] * u_min1 + w[end - 1] * u_min2 +
+#                                  w[end - 2] * u_min3 +
+#                                  w[end - 3] * u_min4
+#     else
+#         time_deriv_weights!(@view(w[(end - 4):end]),
+#                             @view(t[(end - 4):end]))
+#         # @. approx_du = (1 / Δt) * (25 / 12) * (u_min1 - (48 / 25) * u_min2 + (36 / 25) * u_min3 - (16 / 25) * u_min4 + (3 / 25) * u_min5)
+#         @inbounds @. approx_du = w[end] * u_min1 + w[end - 1] * u_min2 +
+#                                  w[end - 2] * u_min3 +
+#                                  w[end - 3] * u_min4 + w[end - 4] * u_min5
+#         # @printf("Full reconstruction, max(approx_du) = %f, min(approx_du) = %f \n", maximum(approx_du), minimum(approx_du))
+#         # if maximum(approx_du) < 1e-10
+#         #     @printf("time_history: %f, %f, %f, %f, %f \n\n", t[end-4], t[end-3], t[end-2], t[end-1], t[end])
+#         # end
+#     end
 
-    return nothing
-end
-end # @muladd
+#     return nothing
+# end
+# end # @muladd
