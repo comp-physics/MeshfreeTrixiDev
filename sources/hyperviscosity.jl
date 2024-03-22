@@ -184,6 +184,7 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     eps_rv = zeros(uEltype, pd.num_points)
     eps = zeros(uEltype, pd.num_points)
     residual = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
+    approx_du = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps_uw = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps_rv = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
@@ -196,10 +197,12 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     # the approximation order of the spatial discretization
     # Ref: Tominec (2023) Section 3.1
     time_history = zeros(uEltype, polydeg + 1)
+    time_weights = zeros(uEltype, polydeg + 1)
     sol_history = allocate_nested_array(uEltype, nvars, (pd.num_points, polydeg + 1),
                                         solver)
 
-    return (; eps_uw, eps_rv, eps, residual, time_history, sol_history)
+    return (; eps_uw, eps_rv, eps, residual, approx_du, time_history, time_weights,
+            sol_history)
 end
 
 function update_upwind_visc!(eps_uw, u,
