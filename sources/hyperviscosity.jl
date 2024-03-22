@@ -183,6 +183,7 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     eps_uw = zeros(uEltype, pd.num_points)
     eps_rv = zeros(uEltype, pd.num_points)
     eps = zeros(uEltype, pd.num_points)
+    eps_c = zeros(Int, pd.num_points) # 0 for eps_rv or 1 for eps_uw
     residual = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     approx_du = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
     # eps_uw = allocate_nested_array(uEltype, nvars, (pd.num_points,), solver)
@@ -201,7 +202,7 @@ function create_tominec_rv_cache(solver::PointCloudSolver, equations,
     sol_history = allocate_nested_array(uEltype, nvars, (pd.num_points, polydeg + 1),
                                         solver)
 
-    return (; eps_uw, eps_rv, eps, residual, approx_du, time_history, time_weights,
+    return (; eps_uw, eps_rv, eps, c, residual, approx_du, time_history, time_weights,
             sol_history)
 end
 
@@ -228,18 +229,35 @@ function update_upwind_visc!(eps_uw, u,
     end
 end
 
-function update_upwind_visc!(eps_uw, u,
-                             equations::CompressibleEulerEquations2D, domain, cache)
+function update_residual_visc!(eps_rv, u,
+                               equations::CompressibleEulerEquations2D, domain, cache,
+                               semi_cache)
+    @unpack residual, approx_du, c = cache
+    @unpack u_values, local_values_threaded, rhs_local_threaded = semi_cache
+    local_u = local_values_threaded[1]
+    local_rhs = rhs_local_threaded[1]
+    set_to_zero!(local_u)
+    set_to_zero!(local_rhs)
+
     gamma = equations.gamma
-    set_to_zero!(eps_uw)
+    set_to_zero!(eps_rv)
 
-    for idx in eachindex(eps_uw)
-        # Convert from conservative to primitive variables
-        rho, v1, v2, p = cons2prim(u[idx], equations)
+    @. residual = approx_du - du
+    StructArrays.foreachfield(col -> col .= abs.(col), residual)
+    mean_u = mean(u)
+    recursivecopy!(local_u, u)
+    for i in eachindex(local_u)
+        local_u[i] = abs.(local_u[i] .- mean_u)
+    end
+    n_inf_norms = maximum(local_u)
+    n_inf_norms = SVector(map(x -> x == 0.0 ? eps() : x, n_inf_norms))
+    rho_n, m1_n, m2_n, e_n = n_inf_norms
 
-        # Compute local speed (magnitude of velocity) and sound speed
-        speed = sqrt(v1^2 + v2^2)
-        sound_speed = sqrt(gamma * p / rho)
+    for idx in eachindex(eps_rv)
+        rho_res, m1_res, m2_res, e_res = residual[idx]
+
+        # Max residual deviation
+        max_res = max(rho_res / rho_n, m1_res / m1_n, m2_res / m2_n, e_res / e_n)
 
         # h_loc is minimum pairwise distance between points in a patch centered
         # around x_i where patch consists of 5 points closest to x_i
@@ -247,21 +265,35 @@ function update_upwind_visc!(eps_uw, u,
         h_loc = norm(domain.pd.points[idx] - domain.pd.points[domain.pd.neighbors[idx][2]])
 
         # Calculate upwind viscosity for the current point
-        eps_uw[idx] = 0.5 * h_loc * (speed + sound_speed)  # Assuming h_loc is uniform; adjust as needed
+        eps_rv[idx] = 0.5 * c * h_loc^2 * max_res  # Assuming h_loc is uniform; adjust as needed
     end
+end
+
+function update_visc!(eps, eps_c, eps_uw, eps_rv)
+    for i in eachindex(eps)
+        if isnan(eps_rv[i]) || isinf(eps_rv[i])
+            eps[i] = eps_uw[i]
+            eps_c[i] = 1.0
+        else
+            eps[i] = min(eps_rv[i], eps_uw[i])
+            eps_c[i] = eps_rv[i] < eps_uw[i] ? 0.0 : 1.0
+        end
+    end
+
+    return nothing
 end
 
 function (source::SourceResidualViscosityTominec)(du, u, t, domain, equations,
                                                   solver::PointCloudSolver, semi_cache)
     basis = solver.basis
     pd = domain.pd
-    @unpack eps_uw, eps_rv, eps, residual = cache
+    @unpack eps_uw, eps_rv, eps, eps_c, residual, approx_du = cache
     @unpack rbf_differentiation_matrices, u_values, local_values_threaded, rhs_local_threaded = semi_cache
 
     # Update eps
     update_upwind_visc!(eps_uw, u, equations, domain, cache)
-    # update_residual_visc!(eps_rv, residual, u, equations, domain, cache)
-    # update_eps!(eps, eps_uw, eps_rv)
+    update_residual_visc!(eps_rv, u, equations, domain, cache, semi_cache)
+    update_visc!(eps, eps_c, eps_uw, eps_rv)
 
     # Compute the hyperviscous dissipation
     # We need to apply P ⋅ u = Dx' diag(eps) Dx u + Dy' diag(eps) Dy u + ...
