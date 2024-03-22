@@ -47,11 +47,15 @@ function ConstructionBase.getproperties(rd::RefPointData)
      f = rd.f)
 end
 
-# Updated _propertynames function to reflect the new fields in RefPointData
-_propertynames(::Type{RefPointData}, private::Bool = false) = (:nv, :f)
+# # Updated _propertynames function to reflect the new fields in RefPointData
+# _propertynames(::Type{RefPointData}, private::Bool = false) = (:nv, :f)
+
+# function Base.propertynames(x::RefPointData, private::Bool = false)
+#     return (fieldnames(typeof(x))..., _propertynames(typeof(x))...)
+# end
 
 function Base.propertynames(x::RefPointData, private::Bool = false)
-    return (fieldnames(typeof(x))..., _propertynames(typeof(x))...)
+    return fieldnames(typeof(x))
 end
 
 # convenience unpacking routines

@@ -94,3 +94,13 @@ semi = SemidiscretizationHyperbolic(domain, equations,
                                     source_terms = sources)
 tspan = (0.0, 0.4)
 ode = semidiscretize(semi, tspan)
+
+# Try sim
+summary_callback = SummaryCallback()
+alive_callback = AliveCallback(alive_interval = 10)
+# analysis_interval = 100
+# analysis_callback = AnalysisCallback(semi, interval=analysis_interval, uEltype=real(dg))
+callbacks = CallbackSet(summary_callback, alive_callback, history_callback)
+time_int_tol = 1e-8
+sol = solve(ode, SSPRK43(); abstol = time_int_tol, reltol = time_int_tol,
+            ode_default_options()..., callback = callbacks)
