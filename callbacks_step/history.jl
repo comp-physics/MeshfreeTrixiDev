@@ -6,22 +6,22 @@
 #! format: noindent
 
 """
-    HistoryCallback(; cfl=1.0)
+    HistoryCallback(; approx_order=1.0)
 
 Update solution time history according to a spline interpolation with 
-reconstruction order `polydeg`. Utilized to approximate residual 
+reconstruction order `approx_order`. Utilized to approximate residual 
 for targeted residual based viscosity.
 """
 mutable struct HistoryCallback{RealT}
-    polydeg::RealT
+    approx_order::RealT
 end
 
 function Base.show(io::IO, cb::DiscreteCallback{<:Any, <:HistoryCallback})
     @nospecialize cb # reduce precompilation time
 
     history_callback = cb.affect!
-    @unpack polydeg = history_callback
-    print(io, "HistoryCallback(polydeg=", polydeg, ")")
+    @unpack approx_order = history_callback
+    print(io, "HistoryCallback(approx_order=", approx_order, ")")
 end
 
 function Base.show(io::IO, ::MIME"text/plain",
@@ -34,14 +34,14 @@ function Base.show(io::IO, ::MIME"text/plain",
         history_callback = cb.affect!
 
         setup = [
-            "Reconstruction Order" => history_callback.polydeg
+            "Reconstruction Order" => history_callback.approx_order
         ]
         summary_box(io, "HistoryCallback", setup)
     end
 end
 
-function HistoryCallback(; cfl::Real = 1.0)
-    history_callback = HistoryCallback()
+function HistoryCallback(; approx_order::Int)
+    history_callback = HistoryCallback(approx_order)
 
     DiscreteCallback(history_callback, history_callback, # the first one is the condition, the second the affect!
                      save_positions = (false, false),
@@ -63,10 +63,10 @@ end
     t = integrator.t
     u_ode = integrator.u
     semi = integrator.p
-    @unpack polydeg = history_callback
+    @unpack approx_order = history_callback
 
     # Dispatch based on semidiscretization
-    @trixi_timeit timer() "update history" update_history!(semi, u_ode, t, polydeg,
+    @trixi_timeit timer() "update history" update_history!(semi, u_ode, t, approx_order,
                                                            integrator)
 
     # avoid re-evaluating possible FSAL stages
@@ -74,21 +74,21 @@ end
     return nothing
 end
 
-function update_history!(semi, u, t, polydeg, integrator)
+function update_history!(semi, u, t, approx_order, integrator)
     @unpack source_terms = semi
 
     # If source includes time history cache, update
     # otherwise no-op
     for source in values(source_terms)
-        modify_cache!(source, u, t, polydeg, integrator)
+        modify_cache!(source, u, t, approx_order, integrator)
     end
 end
 
-function modify_cache!(source::T, u, t, polydeg, integrator) where {T}
+function modify_cache!(source::T, u, t, approx_order, integrator) where {T}
     # Fallback method that does nothing
 end
 
-function modify_cache!(source::SourceResidualViscosityTominec, u, t, polydeg,
+function modify_cache!(source::SourceResidualViscosityTominec, u, t, approx_order,
                        integrator)
     # May need access to integrator to get count of timesteps 
     # since first few iterations can only support lower order
@@ -97,7 +97,7 @@ function modify_cache!(source::SourceResidualViscosityTominec, u, t, polydeg,
 
     shift_soln_history!(time_history, sol_history, t, u)
     update_approx_du!(approx_du, time_weights, time_history, sol_history, success_iter,
-                      polydeg)
+                      approx_order)
 end
 
 function shift_soln_history!(time_history, sol_history, t, u)
@@ -109,10 +109,10 @@ function shift_soln_history!(time_history, sol_history, t, u)
 end
 
 function update_approx_du!(approx_du, time_weights, time_history, sol_history,
-                           success_iter, polydeg)
+                           success_iter, approx_order)
     set_to_zero!(approx_du)
 
-    num_time_points = min(success_iter + 1, polydeg + 1)
+    num_time_points = min(success_iter + 1, approx_order + 1)
     if success_iter > 0
         # Update the time weights for the current number of time points
         time_deriv_weights!(@view(time_weights[1:num_time_points]),
@@ -224,4 +224,5 @@ end
 
 #     return nothing
 # end
-# end # @muladd
+
+end # @muladd

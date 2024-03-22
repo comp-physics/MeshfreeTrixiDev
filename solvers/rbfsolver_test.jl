@@ -3,13 +3,15 @@ using Revise
 includet("../header.jl")
 
 # Base Methods
-basis = RefPointData(Point1D(), RBF(DefaultRBFType(5)), 5)
-basis = RefPointData(Point2D(), RBF(), 5)
-basis = RefPointData(Point1D(), RBF(PolyharmonicSpline(5)), 3)
+approximation_order = 3
+basis = RefPointData(Point1D(), RBF(DefaultRBFType(5)), approximation_order)
+basis = RefPointData(Point2D(), RBF(), approximation_order)
+basis = RefPointData(Point1D(), RBF(PolyharmonicSpline(5)), approximation_order)
 solver = RBFSolver(basis, RBFFDEngine())
 
 # Specialized Methods
-basis = PointCloudBasis(Point2D(), 3; approximation_type = RBF(PolyharmonicSpline(5)))
+basis = PointCloudBasis(Point2D(), approximation_order;
+                        approximation_type = RBF(PolyharmonicSpline(5)))
 solver = PointCloudSolver(basis)
 
 casename = "./medusa_point_clouds/cyl"
@@ -74,6 +76,18 @@ source_hv = SourceHyperviscosityFlyer(solver, equations, domain; k = 2, c = 1.0)
 source_hv2 = SourceHyperviscosityTominec(solver, equations, domain; c = 1.0)
 sources = (; source_hv, source_hv2)
 sources = SourceTerms(hv = source_hv, hv2 = source_hv2)
+semi = SemidiscretizationHyperbolic(domain, equations,
+                                    initial_condition, solver;
+                                    boundary_conditions = boundary_conditions,
+                                    source_terms = sources)
+tspan = (0.0, 0.4)
+ode = semidiscretize(semi, tspan)
+
+# Test history callback
+history_callback = HistoryCallback(approx_order = approximation_order)
+source_rv = SourceResidualViscosityTominec(solver, equations, domain; c = 1.0,
+                                           polydeg = approximation_order)
+sources = SourceTerms(hv = source_hv2, rv = source_rv)
 semi = SemidiscretizationHyperbolic(domain, equations,
                                     initial_condition, solver;
                                     boundary_conditions = boundary_conditions,
