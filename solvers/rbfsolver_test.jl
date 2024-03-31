@@ -117,8 +117,31 @@ time_int_tol = 1e-8
 sol = solve(ode, SSPRK43(); abstol = time_int_tol, reltol = time_int_tol,
             ode_default_options()..., callback = callbacks)
 
+# Test upwind viscosity
+source_rv = SourceUpwindViscosityTominec(solver, equations, domain)
+sources = SourceTerms(hv = source_hv2, rv = source_rv)
+semi = SemidiscretizationHyperbolic(domain, equations,
+                                    initial_condition, solver;
+                                    boundary_conditions = boundary_conditions,
+                                    source_terms = sources)
+tspan = (0.0, 0.4)
+ode = semidiscretize(semi, tspan)
+
+# Try sim
+# summary_callback = SummaryCallback()
+summary_callback = InfoCallback()
+alive_callback = AliveCallback(alive_interval = 10)
+# analysis_interval = 100
+# analysis_callback = AnalysisCallback(semi, interval=analysis_interval, uEltype=real(dg))
+callbacks = CallbackSet(summary_callback, alive_callback)
+time_int_tol = 1e-8
+sol = solve(ode, SSPRK43(); abstol = time_int_tol, reltol = time_int_tol,
+            ode_default_options()..., callback = callbacks)
+
 # Plotting
 using GLMakie
 time = 0.0
+rho = [sol[1][x][1] for x in 1:length(sol.u[end])]
 rho = [sol(time)[x][1] for x in 1:length(sol.u[end])]
+any(isnan.(rho))
 scatter(domain.pd.points, color = rho, axis = (aspect = DataAspect(),))
