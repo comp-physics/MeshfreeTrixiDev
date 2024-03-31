@@ -6,7 +6,7 @@ using OrdinaryDiffEq
 
 # Base Methods
 approximation_order = 3
-basis = RefPointData(Point1D(), RBF(DefaultRBFType(5)), approximation_order)
+# basis = RefPointData(Point1D(), RBF(DefaultRBFType(5)), approximation_order)
 basis = RefPointData(Point2D(), RBF(), approximation_order)
 basis = RefPointData(Point1D(), RBF(PolyharmonicSpline(5)), approximation_order)
 solver = RBFSolver(basis, RBFFDEngine())
@@ -48,7 +48,14 @@ domain = PointCloudDomain(solver, casename, boundary_names)
 
 # Instantiate Semidiscretization
 equations = CompressibleEulerEquations2D(1.4)
-initial_condition = initial_condition_constant
+function initial_condition_cyl(x, t, equations::CompressibleEulerEquations2D)
+    rho = 1.4
+    rho_v1 = 4.1
+    rho_v2 = 0.0
+    rho_e = 8.8
+    return SVector(rho, rho_v1, rho_v2, rho_e)
+end
+initial_condition = initial_condition_cyl
 boundary_conditions = (; :inlet => BoundaryConditionDirichlet(initial_condition),
                        :outlet => Trixi.BoundaryConditionDoNothing(),
                        :top => boundary_condition_slip_wall,
@@ -109,3 +116,9 @@ callbacks = CallbackSet(summary_callback, alive_callback, history_callback)
 time_int_tol = 1e-8
 sol = solve(ode, SSPRK43(); abstol = time_int_tol, reltol = time_int_tol,
             ode_default_options()..., callback = callbacks)
+
+# Plotting
+using GLMakie
+time = 0.0
+rho = [sol(time)[x][1] for x in 1:length(sol.u[end])]
+scatter(domain.pd.points, color = rho, axis = (aspect = DataAspect(),))
