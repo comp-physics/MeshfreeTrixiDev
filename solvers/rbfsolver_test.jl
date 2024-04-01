@@ -5,15 +5,16 @@ using OrdinaryDiffEq
 # includet("../header.jl")
 
 # Base Methods
-approximation_order = 3
+approximation_order = 5
+rbf_order = 3
 # basis = RefPointData(Point1D(), RBF(DefaultRBFType(5)), approximation_order)
 basis = RefPointData(Point2D(), RBF(), approximation_order)
-basis = RefPointData(Point1D(), RBF(PolyharmonicSpline(5)), approximation_order)
+basis = RefPointData(Point1D(), RBF(PolyharmonicSpline(rbf_order)), approximation_order)
 solver = RBFSolver(basis, RBFFDEngine())
 
 # Specialized Methods
 basis = PointCloudBasis(Point2D(), approximation_order;
-                        approximation_type = RBF(PolyharmonicSpline(5)))
+                        approximation_type = RBF(PolyharmonicSpline(rbf_order)))
 solver = PointCloudSolver(basis)
 
 casename = "./medusa_point_clouds/cyl"
@@ -52,7 +53,7 @@ function initial_condition_cyl(x, t, equations::CompressibleEulerEquations2D)
     rho = 1.4
     rho_v1 = 4.1
     rho_v2 = 0.0
-    rho_e = 8.8
+    rho_e = 8.8 #* 1.4
     return SVector(rho, rho_v1, rho_v2, rho_e)
 end
 initial_condition = initial_condition_cyl
@@ -68,13 +69,13 @@ tspan = (0.0, 0.4)
 ode = semidiscretize(semi, tspan)
 
 # Working through cache and operator details
-includet("../utilities/helper.jl")
-show_ft(semi.cache)
-u = deepcopy(ode.u0)
-du = deepcopy(ode.u0)
-n = length(u)
-A = sprand(n, n, 0.01)
-apply_to_each_field(mul_by!(A), du, u)
+# includet("../utilities/helper.jl")
+# show_ft(semi.cache)
+# u = deepcopy(ode.u0)
+# du = deepcopy(ode.u0)
+# n = length(u)
+# A = sprand(n, n, 0.01)
+# apply_to_each_field(mul_by!(A), du, u)
 
 # Test operator instantiation
 # A = rbf_block(basis.f.rbf, basis; N = 3)
@@ -119,6 +120,7 @@ sol = solve(ode, SSPRK43(); abstol = time_int_tol, reltol = time_int_tol,
 
 # Test upwind viscosity
 source_rv = SourceUpwindViscosityTominec(solver, equations, domain)
+source_hv2 = SourceHyperviscosityTominec(solver, equations, domain; c = 1.0)
 sources = SourceTerms(hv = source_hv2, rv = source_rv)
 semi = SemidiscretizationHyperbolic(domain, equations,
                                     initial_condition, solver;
@@ -141,7 +143,18 @@ sol = solve(ode, SSPRK43(); abstol = time_int_tol, reltol = time_int_tol,
 # Plotting
 using GLMakie
 time = 0.0
-rho = [sol[1][x][1] for x in 1:length(sol.u[end])]
-rho = [sol(time)[x][1] for x in 1:length(sol.u[end])]
+rho = [sol[end][x][1] for x in 1:length(sol.u[end])]
+# rho = [sol(time)[x][1] for x in 1:length(sol.u[end])]
+mx = [sol[end][x][2] for x in 1:length(sol.u[end])]
+my = [sol[end][x][3] for x in 1:length(sol.u[end])]
+rho_e = [sol[end][x][4] for x in 1:length(sol.u[end])]
 any(isnan.(rho))
+rho[isnan.(rho)] .= 0.0
 scatter(domain.pd.points, color = rho, axis = (aspect = DataAspect(),))
+scatter(domain.pd.points, color = mx, axis = (aspect = DataAspect(),))
+scatter(domain.pd.points, color = my, axis = (aspect = DataAspect(),))
+scatter(domain.pd.points, color = rho_e, axis = (aspect = DataAspect(),))
+
+# Plotting areas of negative pressure
+scatter(domain.pd.points, axis = (aspect = DataAspect(),))
+scatter!(domain.pd.points[idx], color = :red)
