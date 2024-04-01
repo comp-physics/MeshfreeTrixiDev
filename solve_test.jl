@@ -12,7 +12,7 @@ basis = PointCloudBasis(Point2D(), approximation_order;
                         approximation_type = RBF(PolyharmonicSpline(rbf_order)))
 solver = PointCloudSolver(basis)
 
-casename = "./medusa_point_clouds/cyl_0_05"
+casename = "./medusa_point_clouds/cyl_0_025"
 boundary_names = Dict(:inlet => 1, :outlet => 2, :bottom => 3, :top => 4, :cyl => 5)
 domain = PointCloudDomain(solver, casename, boundary_names)
 
@@ -51,7 +51,7 @@ semi = SemidiscretizationHyperbolic(domain, equations,
                                     initial_condition, solver;
                                     boundary_conditions = boundary_conditions,
                                     source_terms = sources)
-tspan = (0.0, 0.4)
+tspan = (0.0, 2.0)
 ode = semidiscretize(semi, tspan)
 
 # Try sim
@@ -62,10 +62,10 @@ alive_callback = AliveCallback(alive_interval = 10)
 # analysis_callback = AnalysisCallback(semi, interval=analysis_interval, uEltype=real(dg))
 callbacks = CallbackSet(summary_callback, alive_callback)
 time_int_tol = 1e-3
-sol = solve(ode, SSPRK43(); dt = 0.00001, abstol = time_int_tol, reltol = time_int_tol,
+sol = solve(ode, SSPRK43(); abstol = time_int_tol, reltol = time_int_tol,
             ode_default_options()..., callback = callbacks)
-sol = solve(ode, SSPRK54(); dt = 0.00001, abstol = time_int_tol, reltol = time_int_tol,
-            ode_default_options()..., callback = callbacks)
+# sol = solve(ode, SSPRK54(); dt = 0.00001, abstol = time_int_tol, reltol = time_int_tol,
+#             ode_default_options()..., callback = callbacks)
 summary_callback()
 # Plotting
 using GLMakie
@@ -81,6 +81,10 @@ scatter(domain.pd.points, color = rho, axis = (aspect = DataAspect(),))
 scatter(domain.pd.points, color = mx, axis = (aspect = DataAspect(),))
 scatter(domain.pd.points, color = my, axis = (aspect = DataAspect(),))
 scatter(domain.pd.points, color = rho_e, axis = (aspect = DataAspect(),))
+domain.pd.points[semi.mesh.boundary_tags[:cyl].idx]
+semi.mesh.boundary_tags[:cyl].idx
+semi.mesh.boundary_tags[:cyl].normals
+mx[semi.mesh.boundary_tags[:cyl].idx]
 
 # Test single step
 u0 = ode.u0
