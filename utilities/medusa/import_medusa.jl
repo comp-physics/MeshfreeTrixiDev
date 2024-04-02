@@ -39,7 +39,7 @@ function import_medusa(casename)
         if i == 1
             boundary_ranges[i] = 1:boundary_ranges_[i]
         else
-            boundary_ranges[i] = boundary_ranges[i-1][end]+1:boundary_ranges[i-1][end]+boundary_ranges_[i]
+            boundary_ranges[i] = (boundary_ranges[i - 1][end] + 1):(boundary_ranges[i - 1][end] + boundary_ranges_[i])
         end
     end
 
@@ -47,15 +47,15 @@ function import_medusa(casename)
     # positions = Vector{Vector{Float64}}(undef, size(positions, 1))
     # positions = [positions[i, :] for i in 1:size(positions, 1)]
     # position_out = Array{SVector{2},1}(undef, length(positions))
-    position_out = copy(vec(reinterpret(SVector{2,Float64}, positions')))
+    position_out = copy(vec(reinterpret(SVector{2, Float64}, positions')))
 
     ## Convert normals matrix to vector of vectors
-    normal_out = copy(vec(reinterpret(SVector{2,Float64}, normals')))
+    normal_out = copy(vec(reinterpret(SVector{2, Float64}, normals')))
 
     # positions, interior_idx, boundary_idxs, normals, boundary_ranges, types = import_medusa(casename)
     ### Partition local normals 
     boundary_normals = [normal_out[boundary_ranges[i]] for i in eachindex(boundary_ranges)]
 
-    return position_out, interior_idx, boundary_idxs, boundary_normals, normal_out, boundary_ranges, types
-
+    return position_out, interior_idx, boundary_idxs, boundary_normals, normal_out,
+           boundary_ranges, types
 end

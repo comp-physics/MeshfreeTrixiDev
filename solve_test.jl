@@ -5,24 +5,40 @@ using OrdinaryDiffEq
 # includet("../header.jl")
 
 # Base Methods
-approximation_order = 3
+approximation_order = 1
 rbf_order = 3
 # Specialized Methods
 basis = PointCloudBasis(Point2D(), approximation_order;
                         approximation_type = RBF(PolyharmonicSpline(rbf_order)))
 solver = PointCloudSolver(basis)
 
-casename = "./medusa_point_clouds/cyl_0_025"
+casename = "./medusa_point_clouds/cyl_0_0125"
 boundary_names = Dict(:inlet => 1, :outlet => 2, :bottom => 3, :top => 4, :cyl => 5)
 domain = PointCloudDomain(solver, casename, boundary_names)
 
 # Instantiate Semidiscretization
+function basic_limiter!(u_ode, integrator,
+                        semi::Trixi.AbstractSemidiscretization,
+                        t)
+    @unpack mesh, solver, cache, equations = semi
+    for e in eachelement(mesh, solver, cache)
+        rho, rho_v1, rho_v2, rho_e = u_ode[e]
+        if rho < 0.0
+            rho = eps()
+        end
+        if rho_e < 0.0
+            rho_e = eps()
+        end
+        # p = (equations.gamma - 1) * (rho_e - 0.5 * (rho_v1 * v1 + rho_v2 * v2))
+        u_ode[e] = SVector(rho, rho_v1, rho_v2, rho_e)
+    end
+end
 equations = CompressibleEulerEquations2D(1.4)
 function initial_condition_cyl(x, t, equations::CompressibleEulerEquations2D)
     rho = 1.4
     rho_v1 = 4.1
     rho_v2 = 0.0
-    rho_e = 8.8 #* 1.4
+    rho_e = 8.8 * 1.4
     return SVector(rho, rho_v1, rho_v2, rho_e)
 end
 function initial_condition_gradient(x, t, equations::CompressibleEulerEquations2D)
@@ -51,7 +67,7 @@ semi = SemidiscretizationHyperbolic(domain, equations,
                                     initial_condition, solver;
                                     boundary_conditions = boundary_conditions,
                                     source_terms = sources)
-tspan = (0.0, 4.0)
+tspan = (0.0, 0.5)
 ode = semidiscretize(semi, tspan)
 
 # Try sim
@@ -70,10 +86,12 @@ save_solution = SaveSolutionCallback(dt = 0.1,
 #                                      solution_variables = cons2prim)
 callbacks = CallbackSet(summary_callback, alive_callback)
 time_int_tol = 1e-3
-sol = solve(ode, SSPRK43(); abstol = time_int_tol, reltol = time_int_tol,
+sol = solve(ode, SSPRK43(); abstol = time_int_tol,
+            reltol = time_int_tol,
             ode_default_options()..., callback = callbacks)
-# sol = solve(ode, SSPRK54(); dt = 0.00001, abstol = time_int_tol, reltol = time_int_tol,
-#             ode_default_options()..., callback = callbacks)
+sol = solve(ode, SSPRK54(); dt = 0.00001,
+            abstol = time_int_tol, reltol = time_int_tol,
+            ode_default_options()..., callback = callbacks)
 summary_callback()
 # Plotting
 using GLMakie
@@ -133,5 +151,6 @@ scatter(domain.pd.points, color = my, axis = (aspect = DataAspect(),))
 scatter(domain.pd.points, color = rho_e, axis = (aspect = DataAspect(),))
 
 # Plotting areas of negative pressure
+idx = 8361
 scatter(domain.pd.points, axis = (aspect = DataAspect(),))
 scatter!(domain.pd.points[idx], color = :red)

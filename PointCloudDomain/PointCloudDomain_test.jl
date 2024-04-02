@@ -8,12 +8,12 @@ boundary_tags = Dict(:top => BoundaryData([1, 2, 3],
                                           [
                                               SVector{3}(0.0, 1.0, 0.0),
                                               SVector{3}(0.0, 1.0, 0.0),
-                                              SVector{3}(0.0, 1.0, 0.0),
+                                              SVector{3}(0.0, 1.0, 0.0)
                                           ]),
                      :side => BoundaryData([4, 5],
                                            [
                                                SVector{3}(1.0, 0.0, 0.0),
-                                               SVector{3}(1.0, 0.0, 0.0),
+                                               SVector{3}(1.0, 0.0, 0.0)
                                            ]))
 
 # Example initialization of PointCloudMeshData
@@ -26,7 +26,7 @@ boundary_tags = Dict(:top => BoundaryData([1, 2, 3],
                                           [
                                               SVector{2}(0.0, 1.0),
                                               SVector{2}(0.0, 1.0),
-                                              SVector{2}(0.0, 1.0),
+                                              SVector{2}(0.0, 1.0)
                                           ]),
                      :side => BoundaryData([4, 5],
                                            [SVector{2}(1.0, 0.0), SVector{2}(1.0, 0.0)]))
