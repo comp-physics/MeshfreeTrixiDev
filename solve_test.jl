@@ -20,7 +20,7 @@ domain = PointCloudDomain(solver, casename, boundary_names)
 equations = CompressibleEulerEquations2D(1.4)
 function initial_condition_cyl(x, t, equations::CompressibleEulerEquations2D)
     rho = 1.4
-    rho_v1 = 4.1 / 2
+    rho_v1 = 4.1
     rho_v2 = 0.0
     rho_e = 8.8 #* 1.4
     return SVector(rho, rho_v1, rho_v2, rho_e)
@@ -51,7 +51,7 @@ semi = SemidiscretizationHyperbolic(domain, equations,
                                     initial_condition, solver;
                                     boundary_conditions = boundary_conditions,
                                     source_terms = sources)
-tspan = (0.0, 2.0)
+tspan = (0.0, 4.0)
 ode = semidiscretize(semi, tspan)
 
 # Try sim
@@ -60,6 +60,14 @@ summary_callback = InfoCallback()
 alive_callback = AliveCallback(alive_interval = 10)
 # analysis_interval = 100
 # analysis_callback = AnalysisCallback(semi, interval=analysis_interval, uEltype=real(dg))
+save_solution = SaveSolutionCallback(dt = 0.1,
+                                     save_initial_solution = true,
+                                     save_final_solution = true,
+                                     solution_variables = cons2prim)
+# save_solution = SaveSolutionCallback(interval = 100,
+#                                      save_initial_solution = true,
+#                                      save_final_solution = true,
+#                                      solution_variables = cons2prim)
 callbacks = CallbackSet(summary_callback, alive_callback)
 time_int_tol = 1e-3
 sol = solve(ode, SSPRK43(); abstol = time_int_tol, reltol = time_int_tol,
