@@ -32,3 +32,4 @@ header.jl
 
 # Test Running
 medusa_point_clouds/backup/
+out/

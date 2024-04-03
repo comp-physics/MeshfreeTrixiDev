@@ -12,9 +12,11 @@ basis = PointCloudBasis(Point2D(), approximation_order;
                         approximation_type = RBF(PolyharmonicSpline(rbf_order)))
 solver = PointCloudSolver(basis)
 
-casename = "./medusa_point_clouds/cyl_0_0125"
+dir = "./medusa_point_clouds"
+casename = "cyl_0_0125"
+domain_name = joinpath(dir, casename)
 boundary_names = Dict(:inlet => 1, :outlet => 2, :bottom => 3, :top => 4, :cyl => 5)
-domain = PointCloudDomain(solver, casename, boundary_names)
+domain = PointCloudDomain(solver, domain_name, boundary_names)
 
 # Instantiate Semidiscretization
 function basic_limiter!(u_ode, integrator,
@@ -76,16 +78,15 @@ summary_callback = InfoCallback()
 alive_callback = AliveCallback(alive_interval = 10)
 # analysis_interval = 100
 # analysis_callback = AnalysisCallback(semi, interval=analysis_interval, uEltype=real(dg))
-save_solution = SaveSolutionCallback(dt = 0.1,
-                                     save_initial_solution = true,
-                                     save_final_solution = true,
-                                     solution_variables = cons2prim)
+save_solution = SolutionSavingCallback(interval = 1,
+                                       prefix = casename)
 # save_solution = SaveSolutionCallback(interval = 100,
 #                                      save_initial_solution = true,
 #                                      save_final_solution = true,
 #                                      solution_variables = cons2prim)
-callbacks = CallbackSet(summary_callback, alive_callback)
+callbacks = CallbackSet(summary_callback, alive_callback, save_solution)
 time_int_tol = 1e-3
+# Solve
 sol = solve(ode, SSPRK43(); abstol = time_int_tol,
             reltol = time_int_tol,
             ode_default_options()..., callback = callbacks)
