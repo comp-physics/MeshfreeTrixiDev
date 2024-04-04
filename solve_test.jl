@@ -5,7 +5,7 @@ using OrdinaryDiffEq
 # includet("../header.jl")
 
 # Base Methods
-approximation_order = 1
+approximation_order = 5
 rbf_order = 3
 # Specialized Methods
 basis = PointCloudBasis(Point2D(), approximation_order;
@@ -40,7 +40,7 @@ function initial_condition_cyl(x, t, equations::CompressibleEulerEquations2D)
     rho = 1.4
     rho_v1 = 4.1
     rho_v2 = 0.0
-    rho_e = 8.8 * 1.4
+    rho_e = 8.8
     return SVector(rho, rho_v1, rho_v2, rho_e)
 end
 function initial_condition_gradient(x, t, equations::CompressibleEulerEquations2D)
@@ -62,7 +62,7 @@ boundary_conditions = (; :inlet => BoundaryConditionDirichlet(initial_condition)
                        :cyl => boundary_condition_slip_wall)
 
 # Test upwind viscosity
-source_rv = SourceUpwindViscosityTominec(solver, equations, domain)
+source_rv = SourceUpwindViscosityTominec(solver, equations, domain; c_uw = 1.0)
 source_hv2 = SourceHyperviscosityTominec(solver, equations, domain; c = 1.0)
 sources = SourceTerms(hv = source_hv2, rv = source_rv)
 semi = SemidiscretizationHyperbolic(domain, equations,
@@ -78,80 +78,82 @@ summary_callback = InfoCallback()
 alive_callback = AliveCallback(alive_interval = 10)
 # analysis_interval = 100
 # analysis_callback = AnalysisCallback(semi, interval=analysis_interval, uEltype=real(dg))
-save_solution = SolutionSavingCallback(interval = 1,
+save_solution = SolutionSavingCallback(interval = 10,
                                        prefix = casename)
 # save_solution = SaveSolutionCallback(interval = 100,
 #                                      save_initial_solution = true,
 #                                      save_final_solution = true,
 #                                      solution_variables = cons2prim)
 callbacks = CallbackSet(summary_callback, alive_callback, save_solution)
-time_int_tol = 1e-3
+time_int_tol = 1e-4
+stage_limiter! = PositivityPreservingLimiterZhangShu(thresholds = (5.0e-7, 1.0e-6),
+                                                     variables = (pressure, Trixi.density))
 # Solve
-sol = solve(ode, SSPRK43(); abstol = time_int_tol,
+sol = solve(ode, SSPRK43(stage_limiter! = stage_limiter!); abstol = time_int_tol,
             reltol = time_int_tol,
             ode_default_options()..., callback = callbacks)
-sol = solve(ode, SSPRK54(); dt = 0.00001,
-            abstol = time_int_tol, reltol = time_int_tol,
-            ode_default_options()..., callback = callbacks)
+# sol = solve(ode, SSPRK54(); dt = 0.00001,
+#             abstol = time_int_tol, reltol = time_int_tol,
+#             ode_default_options()..., callback = callbacks)
 summary_callback()
 # Plotting
-using GLMakie
-time = 0.0
-rho = [sol[end][x][1] for x in 1:length(sol.u[end])]
-# rho = [sol(time)[x][1] for x in 1:length(sol.u[end])]
-mx = [sol[end][x][2] for x in 1:length(sol.u[end])]
-my = [sol[end][x][3] for x in 1:length(sol.u[end])]
-rho_e = [sol[end][x][4] for x in 1:length(sol.u[end])]
-any(isnan.(rho))
-rho[isnan.(rho)] .= 0.0
-scatter(domain.pd.points, color = rho, axis = (aspect = DataAspect(),))
-scatter(domain.pd.points, color = mx, axis = (aspect = DataAspect(),))
-scatter(domain.pd.points, color = my, axis = (aspect = DataAspect(),))
-scatter(domain.pd.points, color = rho_e, axis = (aspect = DataAspect(),))
-domain.pd.points[semi.mesh.boundary_tags[:cyl].idx]
-semi.mesh.boundary_tags[:cyl].idx
-semi.mesh.boundary_tags[:cyl].normals
-mx[semi.mesh.boundary_tags[:cyl].idx]
+# using GLMakie
+# time = 0.0
+# rho = [sol[end][x][1] for x in 1:length(sol.u[end])]
+# # rho = [sol(time)[x][1] for x in 1:length(sol.u[end])]
+# mx = [sol[end][x][2] for x in 1:length(sol.u[end])]
+# my = [sol[end][x][3] for x in 1:length(sol.u[end])]
+# rho_e = [sol[end][x][4] for x in 1:length(sol.u[end])]
+# any(isnan.(rho))
+# rho[isnan.(rho)] .= 0.0
+# scatter(domain.pd.points, color = rho, axis = (aspect = DataAspect(),))
+# scatter(domain.pd.points, color = mx, axis = (aspect = DataAspect(),))
+# scatter(domain.pd.points, color = my, axis = (aspect = DataAspect(),))
+# scatter(domain.pd.points, color = rho_e, axis = (aspect = DataAspect(),))
+# domain.pd.points[semi.mesh.boundary_tags[:cyl].idx]
+# semi.mesh.boundary_tags[:cyl].idx
+# semi.mesh.boundary_tags[:cyl].normals
+# mx[semi.mesh.boundary_tags[:cyl].idx]
 
-# Test single step
-u0 = ode.u0
-u = deepcopy(u0)
-du = deepcopy(u0)
-# Function
-t = 0.0
-MeshfreeTrixi.rhs!(du, u, semi, t)
-# Separate functions
-@unpack cache, boundary_conditions, source_terms = semi
-t = 0.0
-MeshfreeTrixi.reset_du!(du, solver, cache)
-MeshfreeTrixi.calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
-                                  MeshfreeTrixi.have_nonconservative_terms(equations),
-                                  equations, solver)
-MeshfreeTrixi.calc_fluxes!(du, u, domain,
-                           MeshfreeTrixi.have_nonconservative_terms(equations), equations,
-                           solver.engine, solver, cache)
-MeshfreeTrixi.calc_sources!(du, u, t, source_terms, domain, equations, solver, cache)
-MeshfreeTrixi.calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
-                                  MeshfreeTrixi.have_nonconservative_terms(equations),
-                                  equations, solver)
-u[semi.mesh.boundary_tags[:cyl].idx]
-du[semi.mesh.boundary_tags[:cyl].idx]
-# Plotting
-using GLMakie
-time = 0.0
-rho = [du[x][1] for x in 1:length(du)]
-# rho = [sol(time)[x][1] for x in 1:length(sol.u[end])]
-mx = [du[x][2] for x in 1:length(du)]
-my = [du[x][3] for x in 1:length(du)]
-rho_e = [du[x][4] for x in 1:length(du)]
-any(isnan.(rho))
-rho[isnan.(rho)] .= 0.0
-scatter(domain.pd.points, color = rho, axis = (aspect = DataAspect(),))
-scatter(domain.pd.points, color = mx, axis = (aspect = DataAspect(),))
-scatter(domain.pd.points, color = my, axis = (aspect = DataAspect(),))
-scatter(domain.pd.points, color = rho_e, axis = (aspect = DataAspect(),))
+# # Test single step
+# u0 = ode.u0
+# u = deepcopy(u0)
+# du = deepcopy(u0)
+# # Function
+# t = 0.0
+# MeshfreeTrixi.rhs!(du, u, semi, t)
+# # Separate functions
+# @unpack cache, boundary_conditions, source_terms = semi
+# t = 0.0
+# MeshfreeTrixi.reset_du!(du, solver, cache)
+# MeshfreeTrixi.calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
+#                                   MeshfreeTrixi.have_nonconservative_terms(equations),
+#                                   equations, solver)
+# MeshfreeTrixi.calc_fluxes!(du, u, domain,
+#                            MeshfreeTrixi.have_nonconservative_terms(equations), equations,
+#                            solver.engine, solver, cache)
+# MeshfreeTrixi.calc_sources!(du, u, t, source_terms, domain, equations, solver, cache)
+# MeshfreeTrixi.calc_boundary_flux!(du, u, cache, t, boundary_conditions, domain,
+#                                   MeshfreeTrixi.have_nonconservative_terms(equations),
+#                                   equations, solver)
+# u[semi.mesh.boundary_tags[:cyl].idx]
+# du[semi.mesh.boundary_tags[:cyl].idx]
+# # Plotting
+# using GLMakie
+# time = 0.0
+# rho = [du[x][1] for x in 1:length(du)]
+# # rho = [sol(time)[x][1] for x in 1:length(sol.u[end])]
+# mx = [du[x][2] for x in 1:length(du)]
+# my = [du[x][3] for x in 1:length(du)]
+# rho_e = [du[x][4] for x in 1:length(du)]
+# any(isnan.(rho))
+# rho[isnan.(rho)] .= 0.0
+# scatter(domain.pd.points, color = rho, axis = (aspect = DataAspect(),))
+# scatter(domain.pd.points, color = mx, axis = (aspect = DataAspect(),))
+# scatter(domain.pd.points, color = my, axis = (aspect = DataAspect(),))
+# scatter(domain.pd.points, color = rho_e, axis = (aspect = DataAspect(),))
 
-# Plotting areas of negative pressure
-idx = 8361
-scatter(domain.pd.points, axis = (aspect = DataAspect(),))
-scatter!(domain.pd.points[idx], color = :red)
+# # Plotting areas of negative pressure
+# idx = 8361
+# scatter(domain.pd.points, axis = (aspect = DataAspect(),))
+# scatter!(domain.pd.points[idx], color = :red)
