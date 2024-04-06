@@ -6,40 +6,23 @@ using OrdinaryDiffEq
 
 # Base Methods
 approximation_order = 3
-rbf_order = 3
+rbf_order = 5
 # Specialized Methods
 basis = PointCloudBasis(Point2D(), approximation_order;
                         approximation_type = RBF(PolyharmonicSpline(rbf_order)))
 solver = PointCloudSolver(basis)
 
 dir = "./medusa_point_clouds"
-casename = "cyl_0_0125"
+casename = "cyl_0_00625"
 domain_name = joinpath(dir, casename)
 savename = casename * "_order_$approximation_order"
 boundary_names = Dict(:inlet => 1, :outlet => 2, :bottom => 3, :top => 4, :cyl => 5)
 domain = PointCloudDomain(solver, domain_name, boundary_names)
 
-# Instantiate Semidiscretization
-# function basic_limiter!(u_ode, integrator,
-#                         semi::Trixi.AbstractSemidiscretization,
-#                         t)
-#     @unpack mesh, solver, cache, equations = semi
-#     for e in eachelement(mesh, solver, cache)
-#         rho, rho_v1, rho_v2, rho_e = u_ode[e]
-#         if rho < 0.0
-#             rho = eps()
-#         end
-#         if rho_e < 0.0
-#             rho_e = eps()
-#         end
-#         # p = (equations.gamma - 1) * (rho_e - 0.5 * (rho_v1 * v1 + rho_v2 * v2))
-#         u_ode[e] = SVector(rho, rho_v1, rho_v2, rho_e)
-#     end
-# end
 equations = CompressibleEulerEquations2D(1.4)
 function initial_condition_cyl(x, t, equations::CompressibleEulerEquations2D)
     rho = 1.4
-    rho_v1 = 4.2
+    rho_v1 = 4.1
     rho_v2 = 0.0
     rho_e = 8.8
     return SVector(rho, rho_v1, rho_v2, rho_e)
@@ -52,12 +35,15 @@ boundary_conditions = (; :inlet => BoundaryConditionDirichlet(initial_condition)
                        :cyl => boundary_condition_slip_wall)
 
 # Test upwind viscosity
-source_rv = SourceResidualViscosityTominec(solver, equations, domain; c_rv = 0.1,
+source_rv = SourceResidualViscosityTominec(solver, equations, domain; c_rv = 1.0,
                                            c_uw = 1.0, polydeg = approximation_order + 1)
 # source_rv = SourceUpwindViscosityTominec(solver, equations, domain; c_uw = 1.0)
-source_hv2 = SourceHyperviscosityTominec(solver, equations, domain;
-                                         c = domain.pd.dx_min^(-2 - 2.0))
-sources = SourceTerms(hv = source_hv2, rv = source_rv)
+source_hv = SourceHyperviscosityTominec(solver, equations, domain;
+                                        c = domain.pd.dx_min^(-2 + 0.0))
+# source_hv = SourceHyperviscosityFlyer(solver, equations, domain;
+#                                       k = 2,
+#                                       c = domain.pd.dx_min^(-2 + 0.0))
+sources = SourceTerms(hv = source_hv, rv = source_rv)
 semi = SemidiscretizationHyperbolic(domain, equations,
                                     initial_condition, solver;
                                     boundary_conditions = boundary_conditions,
