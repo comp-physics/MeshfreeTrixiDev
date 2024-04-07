@@ -6,14 +6,14 @@ using OrdinaryDiffEq
 
 # Base Methods
 approximation_order = 3
-rbf_order = 5
+rbf_order = 3
 # Specialized Methods
 basis = PointCloudBasis(Point2D(), approximation_order;
                         approximation_type = RBF(PolyharmonicSpline(rbf_order)))
 solver = PointCloudSolver(basis)
 
 dir = "./medusa_point_clouds"
-casename = "wavy_cyl_0_05"
+casename = "wavy_cyl_0_01"
 domain_name = joinpath(dir, casename)
 savename = casename * "_order_$approximation_order"
 boundary_names = Dict(:inlet => 1, :outlet => 2, :bottom => 3, :top => 4, :cyl => 5)
@@ -43,11 +43,11 @@ boundary_conditions = (; :inlet => BoundaryConditionDirichlet(initial_condition)
                        :cyl => boundary_condition_slip_wall)
 
 # Test upwind viscosity
-source_rv = SourceResidualViscosityTominec(solver, equations, domain; c_rv = 1.0,
+source_rv = SourceResidualViscosityTominec(solver, equations, domain; c_rv = 5.0,
                                            c_uw = 1.0, polydeg = approximation_order + 1)
 # source_rv = SourceUpwindViscosityTominec(solver, equations, domain; c_uw = 1.0)
 source_hv = SourceHyperviscosityTominec(solver, equations, domain;
-                                        c = domain.pd.dx_min^(-2 + 0.0))
+                                        c = domain.pd.dx_min^(-2 + 0.5))
 # source_hv = SourceHyperviscosityFlyer(solver, equations, domain;
 #                                       k = 2,
 #                                       c = domain.pd.dx_min^(-2 + 0.0))
