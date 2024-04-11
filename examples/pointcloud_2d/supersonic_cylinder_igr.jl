@@ -14,7 +14,7 @@ basis = PointCloudBasis(Point2D(), approximation_order;
 solver = PointCloudSolver(basis)
 
 dir = "./medusa_point_clouds"
-casename = "cyl_0_005"
+casename = "cyl_0_01"
 domain_name = joinpath(dir, casename)
 savename = casename * "_order_$approximation_order" * "_igr"
 boundary_names = Dict(:inlet => 1, :outlet => 2, :bottom => 3, :top => 4, :cyl => 5)
@@ -68,13 +68,15 @@ ode = semidiscretize(semi, tspan)
 summary_callback = InfoCallback()
 alive_callback = AliveCallback(alive_interval = 10)
 # history_callback = HistoryCallback(approx_order = approximation_order)
-# analysis_interval = 100
-# analysis_callback = AnalysisCallback(semi, interval=analysis_interval, uEltype=real(dg))
+analysis_interval = 100
+performance_callback = PerformanceCallback(semi, interval = analysis_interval,
+                                           uEltype = real(solver))
 save_solution = SolutionSavingCallback(dt = 0.01,
                                        prefix = savename)
 # save_solution = SolutionSavingCallback(interval = 10,
 #                                        prefix = savename)
-callbacks = CallbackSet(summary_callback, alive_callback, save_solution)
+callbacks = CallbackSet(summary_callback, alive_callback, performance_callback,
+                        save_solution)
 time_int_tol = 1e-3
 stage_limiter! = PositivityPreservingLimiterZhangShu(thresholds = (5.0e-7, 1.0e-6),
                                                      variables = (pressure, Trixi.density))
