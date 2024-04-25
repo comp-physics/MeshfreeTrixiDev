@@ -6,7 +6,7 @@ using OrdinaryDiffEq
 
 # Base Methods
 approximation_order = 3
-rbf_order = 5
+rbf_order = 3
 # Specialized Methods
 basis = PointCloudBasis(Point2D(), approximation_order;
                         approximation_type = RBF(PolyharmonicSpline(rbf_order)))
@@ -40,7 +40,7 @@ function initial_condition_cyl(x, t, equations::CompressibleEulerEquations2D)
         rho = 0.125
         vx = 0
         vy = 0
-        p = 1.0
+        p = 0.1
         return prim2cons(SVector(rho, vx, vy, p), equations)
     end
 end
@@ -49,11 +49,11 @@ boundary_conditions = (; :outer => boundary_condition_slip_wall,
                        :inner => boundary_condition_slip_wall)
 
 # Test upwind viscosity
-source_rv = SourceResidualViscosityTominec(solver, equations, domain; c_rv = 10.0,
-                                           c_uw = 1.0, polydeg = approximation_order + 1)
+source_rv = SourceResidualViscosityTominec(solver, equations, domain; c_rv = 5.0,
+                                           c_uw = 1.0, polydeg = approximation_order)
 # source_rv = SourceUpwindViscosityTominec(solver, equations, domain; c_uw = 1.0)
 source_hv = SourceHyperviscosityTominec(solver, equations, domain;
-                                        c = domain.pd.dx_min^(-2 + 1.5))
+                                        c = domain.pd.dx_min^(-2 + 0.5))
 # source_hv = SourceHyperviscosityFlyer(solver, equations, domain;
 #                                       k = 2,
 #                                       c = domain.pd.dx_min^(-2 + 0.0))
@@ -68,15 +68,19 @@ ode = semidiscretize(semi, tspan)
 # Try sim
 # summary_callback = SummaryCallback()
 summary_callback = InfoCallback()
-alive_callback = AliveCallback(alive_interval = 10)
-history_callback = HistoryCallback(approx_order = approximation_order + 1)
+alive_callback = AliveCallback(alive_interval = 100)
+analysis_interval = 1000
+performance_callback = PerformanceCallback(semi, interval = analysis_interval,
+                                           uEltype = real(solver))
+history_callback = HistoryCallback(approx_order = approximation_order)
 # analysis_interval = 100
 # analysis_callback = AnalysisCallback(semi, interval=analysis_interval, uEltype=real(dg))
-save_solution = SolutionSavingCallback(dt = 0.01,
+save_solution = SolutionSavingCallback(dt = 0.1,
                                        prefix = savename)
 # save_solution = SolutionSavingCallback(interval = 10,
 #                                        prefix = savename)
-callbacks = CallbackSet(summary_callback, alive_callback, history_callback, save_solution)
+callbacks = CallbackSet(summary_callback, alive_callback, performance_callback,
+                        history_callback, save_solution)
 time_int_tol = 1e-3
 stage_limiter! = PositivityPreservingLimiterZhangShu(thresholds = (5.0e-7, 1.0e-6),
                                                      variables = (pressure, Trixi.density))

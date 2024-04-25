@@ -25,7 +25,7 @@ Manifest.toml
 
 # MacOS
 .DS_store
-.vscode/settings.json
+.vscode/
 scratch.jl
 header.jl
 .JuliaFormatter.toml
