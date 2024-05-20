@@ -30,7 +30,7 @@ end
 equations = CompressibleEulerEquations2D(1.4)
 function initial_condition_cyl(x, t, equations::CompressibleEulerEquations2D)
     rho = 1.4
-    rho_v1 = 4.1
+    rho_v1 = 4.2
     rho_v2 = 0.0
     rho_e = 8.8
     return SVector(rho, rho_v1, rho_v2, rho_e)

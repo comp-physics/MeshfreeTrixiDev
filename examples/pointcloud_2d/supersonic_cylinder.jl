@@ -11,7 +11,7 @@ solver = PointCloudSolver(basis)
 
 # Import Domain
 dir = "./medusa_point_clouds"
-casename = "cyl_0_025"
+casename = "cyl_0_005"
 domain_name = joinpath(dir, casename)
 savename = casename * "_order_$approximation_order"
 boundary_names = Dict(:inlet => 1, :outlet => 2, :bottom => 3, :top => 4, :cyl => 5)
@@ -26,7 +26,7 @@ domain = PointCloudDomain(solver, domain_name, boundary_names)
 equations = CompressibleEulerEquations2D(1.4)
 function initial_condition_cyl(x, t, equations::CompressibleEulerEquations2D)
     rho = 1.4
-    rho_v1 = 4.1
+    rho_v1 = 4.2
     rho_v2 = 0.0
     rho_e = 8.8
     return SVector(rho, rho_v1, rho_v2, rho_e)
@@ -42,7 +42,7 @@ boundary_conditions = (; :inlet => BoundaryConditionDirichlet(initial_condition)
 # SourceHyperviscosityTominec for RBF stabilization
 # SourceResidualViscosityTominec for shock stabilization
 source_hv = SourceHyperviscosityTominec(solver, equations, domain;
-                                        c = domain.pd.dx_min^(-2 + 0.5))
+                                        c = domain.pd.dx_min^(-2 + 1.5))
 source_rv = SourceResidualViscosityTominec(solver, equations, domain; c_rv = 5,
                                            c_uw = 1.0, polydeg = approximation_order)
 sources = SourceTerms(hv = source_hv, rv = source_rv)
@@ -62,12 +62,12 @@ analysis_interval = 1000
 performance_callback = PerformanceCallback(semi, interval = analysis_interval,
                                            uEltype = real(solver))
 history_callback = HistoryCallback(approx_order = approximation_order)
-# save_solution = SolutionSavingCallback(dt = 0.1,
-#                                        prefix = savename) # Save to VTK
-callbacks = CallbackSet(summary_callback, alive_callback, performance_callback,
-                        history_callback)
+save_solution = SolutionSavingCallback(dt = 0.01,
+                                       prefix = savename) # Save to VTK
 # callbacks = CallbackSet(summary_callback, alive_callback, performance_callback,
-#                         history_callback, save_solution) # Save to VTK
+#                         history_callback)
+callbacks = CallbackSet(summary_callback, alive_callback, performance_callback,
+                        history_callback, save_solution) # Save to VTK
 time_int_tol = 1e-3
 stage_limiter! = PositivityPreservingLimiterZhangShu(thresholds = (5.0e-7, 1.0e-6),
                                                      variables = (pressure, Trixi.density))

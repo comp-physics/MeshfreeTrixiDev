@@ -53,7 +53,7 @@ source_rv = SourceResidualViscosityTominec(solver, equations, domain; c_rv = 5.0
                                            c_uw = 1.0, polydeg = approximation_order)
 # source_rv = SourceUpwindViscosityTominec(solver, equations, domain; c_uw = 1.0)
 source_hv = SourceHyperviscosityTominec(solver, equations, domain;
-                                        c = domain.pd.dx_min^(-2 + 0.5))
+                                        c = domain.pd.dx_min^(-2 + 1.5))
 # source_hv = SourceHyperviscosityFlyer(solver, equations, domain;
 #                                       k = 2,
 #                                       c = domain.pd.dx_min^(-2 + 0.0))
@@ -75,7 +75,7 @@ performance_callback = PerformanceCallback(semi, interval = analysis_interval,
 history_callback = HistoryCallback(approx_order = approximation_order)
 # analysis_interval = 100
 # analysis_callback = AnalysisCallback(semi, interval=analysis_interval, uEltype=real(dg))
-save_solution = SolutionSavingCallback(dt = 0.1,
+save_solution = SolutionSavingCallback(dt = 0.01,
                                        prefix = savename)
 # save_solution = SolutionSavingCallback(interval = 10,
 #                                        prefix = savename)
