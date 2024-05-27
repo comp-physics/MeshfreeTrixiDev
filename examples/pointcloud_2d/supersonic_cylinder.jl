@@ -5,8 +5,12 @@ using OrdinaryDiffEq
 # Generate RBF-FD Solver
 approximation_order = 3
 rbf_order = 3
+# basis = PointCloudBasis(Point2D(), approximation_order;
+#                         approximation_type = RBF(PolyharmonicSpline(rbf_order)))
 basis = PointCloudBasis(Point2D(), approximation_order;
-                        approximation_type = RBF(PolyharmonicSpline(rbf_order)))
+                        approximation_type = RBF(HybridGaussianPHS(Nrbf = rbf_order,
+                                                                   alpha = 1.0, beta = 1.0,
+                                                                   epsilon = 1.0)))
 solver = PointCloudSolver(basis)
 
 # Import Domain
